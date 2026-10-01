@@ -32,6 +32,21 @@ The GUI labels simulated data. Missing real measurements appear as `--`, not zer
 Protection settings act on the simulated load only; monitor modes are not a
 physical protection system.
 
+## What belongs in this repository
+
+Keep `main/` (firmware), `tests/`, the current setup/safety notes in `docs/`,
+the CMake files, `sdkconfig`, `sdkconfig.defaults`, `partitions.csv`, and the
+README, collaboration guide and license. The hidden Git and VS Code folders
+support version control and editing; personal editor settings are not uploaded.
+
+Presentations, thermal models, old build folders and superseded hardware reports
+have been moved to a separate local archive outside this repository.
+No firmware source files were removed.
+
+`idf.py build` recreates `build/` when needed. It remains ignored by Git.
+After a cleanup or fresh clone, build once to regenerate the compiler include
+paths used by VS Code.
+
 ## Files in plain language
 
 | File in `main/` | Purpose |
@@ -103,4 +118,5 @@ current firmware.
 ## License
 
 MIT. See `LICENSE`.
+# esp32_electronic_load
 # esp32_electronic_load
