@@ -1,0 +1,22 @@
+idf_component_register(
+    SRCS
+        "app_main.cpp"
+        "board_drivers.cpp"
+        "display.cpp"
+        "menu_model.cpp"
+        "sensor_math.cpp"
+        "data_logger.cpp"
+        "hardware.cpp"
+        "load_control.cpp"
+        "system_types.cpp"
+        "tft_ui.cpp"
+    INCLUDE_DIRS "."
+    PRIV_REQUIRES
+        esp_driver_gpio
+        esp_driver_i2c
+        esp_hw_support
+        esp_timer
+        freertos
+        log
+        spiffs
+)

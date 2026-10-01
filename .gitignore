@@ -1,0 +1,36 @@
+# ESP-IDF generated output (keep sdkconfig and sdkconfig.defaults).
+build/
+build-*/
+managed_components/
+sdkconfig.old
+compile_commands.json
+
+# Machine-specific editor settings. Share only portable editor configuration.
+.vscode/*
+!.vscode/c_cpp_properties.json
+!.vscode/extensions.json
+
+# Local working material: not part of the shared firmware repository.
+/.codex-build/
+/.codex-finalizer/
+/.codex/
+/thermal_simulation/
+/progress_presentations/
+/weekly_presentation/
+/*.pptx
+/*.pptx.inspect.ndjson
+
+# OS/editor clutter and private credentials.
+.DS_Store
+._*
+*.swp
+*.swo
+*~
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+__pycache__/
+*.pyc
