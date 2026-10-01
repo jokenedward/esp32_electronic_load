@@ -1,46 +1,59 @@
-# Software checks — 1 October 2026
+# Software test record
 
-## Passed
+1 October 2026. Target: ESP32-WROOM-32E-N4. Toolchain: ESP-IDF 6.0.2.
 
-- ESP-IDF 6.0.2 build for the original ESP32, default Simulation configuration.
-- Separate temporary-copy builds with TFT/encoder enabled in VoltageMonitor
-  and SensorMonitor. Their verification flags were enabled for compilation only;
-  this is not evidence of a verified board. Do not flash those temporary binaries.
-- Host tests compiled with C++17, warnings treated as errors, AddressSanitizer
-  and UndefinedBehaviorSanitizer. All assertions passed.
-- esptool image validation: ESP32 target, 4 MB flash header, valid checksum/hash.
+## Build results
 
-Host tests cover all eight ADS7828 channel commands, DAC frame fields,
-byte reversal, divider/current/Pt1000 calculations, CC/CV convergence on the
-simple simulated plant, every protection/cutoff decision, menu edits/cancellation,
-waiting for settings acknowledgement, running-state edit lock and encoder bounce.
+| Configuration | Result |
+|---|---|
+| Default Simulation | Passed |
+| VoltageMonitor with TFT/encoder enabled | Passed |
+| SensorMonitor with TFT/encoder enabled | Passed |
+| esptool image check | Valid ESP32 image, 4 MB flash header, checksum and hash |
 
-Final default application image: **182,240 bytes**, with **83% of its 1 MiB
-application partition free**. This percentage is free program storage, not RAM
-or proof that the TFT buffers will allocate on the physical device.
+The two monitor builds used temporary copies with hardware flags enabled for
+compilation only. Those builds were not flashed and do not confirm the wiring.
 
-## Actual project left in this state
+The default application image was 182,240 bytes, leaving 83% of the 1 MiB
+application partition free. This is flash storage, not available RAM.
+TFT buffer allocation still needs checking on the board.
 
-- `TestMode::Simulation`.
-- TFT and encoder disabled.
-- All hardware-verification flags false.
-- Real load control rejected by the hardware abstraction.
-- No physical DAC reference commands issued by the application.
-- Original partition offsets retained; flash configuration corrected to 4 MB.
-- No flashing, PCB/CAD edits or physical component changes.
+## Host tests
 
-## Not tested
+All assertions passed with C++17, warnings treated as errors, AddressSanitizer
+and UndefinedBehaviorSanitizer.
 
-Physical boot/programming, LCD wiring/timing/color/refresh/heap, encoder electrical
-behaviour, I2C bus reliability, ADC calibration, Pt1000 self-heating, DAC analogue
-outputs, actual CC/CV loop performance, hardware shutdown and power/thermal limits.
-These require the confirmed board and supervised bench measurements.
+Coverage included:
 
-The build produced non-fatal ESP-IDF configuration/debug-environment notices.
-An ordinary shell initially lacked the ESP-IDF environment paths/version; the
-build succeeded with the installed environment selected. Use the ESP-IDF
-extension's terminal for normal `idf.py build` commands.
+- ADS7828 channel commands, MCP4922 command frames and bit reversal.
+- Voltage-divider, current-sensor and Pt1000 calculations.
+- CC/CV response using the simulated load model.
+- Protection limits and automatic-stop conditions.
+- Menu navigation, save/cancel and settings acknowledgement.
+- Blocking edits while running.
+- Encoder decoding and contact bounce.
 
-The pre-update source backup is at
-`/private/tmp/esp32-firmware-before-update.SOMNus/`.
-This is temporary storage, not a permanent version-control backup.
+## Configuration at the time of testing
+
+Simulation was the default. TFT, encoder and hardware-verification flags were
+false. The application did not send physical DAC reference commands, and the
+hardware abstraction rejected real load output.
+
+The flash configuration was 4 MB, with the existing partition offsets retained.
+No board was flashed or physically modified during these checks.
+
+## Hardware tests outstanding
+
+Boot and programming; display timing, colours, refresh rate and available heap;
+encoder operation; I2C reliability; ADC calibration; Pt1000 self-heating; DAC
+output levels; analogue CC/CV performance; shutdown response; and electrical
+and thermal limits.
+
+These need to be tested on the confirmed board with the power stage isolated
+during initial checks.
+
+## Build environment
+
+ESP-IDF reported non-fatal configuration and debug-environment notices.
+The build completed after the installed ESP-IDF paths and version were selected.
+Use the ESP-IDF terminal for `idf.py build`.

@@ -19,6 +19,10 @@ compile_commands.json
 /weekly_presentation/
 /*.pptx
 /*.pptx.inspect.ndjson
+# Superseded reports kept in the separate local archive.
+/docs/hardware_design_audit_2026-09-02.md
+/docs/pcb_only_placement_study_2026-09-07.md
+/docs/pcb_thermal_layout_review_2026-09-07.md
 
 # OS/editor clutter and private credentials.
 .DS_Store

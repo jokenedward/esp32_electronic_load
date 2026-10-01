@@ -1,17 +1,19 @@
 # Final PCB / firmware review — 29 September 2026
 
+This report records the design and firmware as they stood on 29 September.
+For the current software and proposed wiring changes, see
+[board bring-up](board_bringup.md).
+
 ## Result
 
-The uploaded design contains the voltage-divider values, but the final board
-cannot be treated as ready for the existing firmware. Several electrical
-connections need correction or confirmation first. Do not connect the 30 V load
-input or enable the power stage on the basis of this review.
+The design files include the voltage-divider values, but several connections
+need correction before the board can be used. Do not connect the 30 V load input
+or enable the power stage until these issues are resolved.
 
-This is a design-file and source-code review, not a physical-board test, circuit
-simulation, full DRC/ERC sign-off, or certification of project compliance.
-No firmware or PCB design files were changed during this review. The existing
-software simulation mode and real-hardware locks remain unchanged; those locks
-do not make an incorrectly wired physical circuit safe.
+The review covered design files and source code. It did not include physical
+board tests, circuit simulation, full DRC/ERC or project compliance testing.
+Firmware and PCB files were unchanged during the review. Software locks do not
+protect against an incorrectly wired analogue circuit.
 
 ## Files checked
 
@@ -27,8 +29,8 @@ Historical copies inside `.history` and `.git` were not used. A schematic XML
 netlist was exported using KiCad CLI 10.0.6. Values and 159 assigned pads for
 the relevant ESP32, ADC, DAC, shift register, TFT connector, current sensor,
 divider and pull-up components were compared with the PCB: no differences
-were found in that selected comparison. Matching net assignments do not prove
-that every trace is correctly routed or that the manufactured board matches.
+were found in that selected comparison. Trace routing and the manufactured
+board still need checking.
 
 SHA-256 of the checked schematic:
 `08300701b3380e80e0c8099b6db9befb1a37d4386f4f14f4b1949ade5286778a`
@@ -98,14 +100,15 @@ must be redesigned before current measurements are enabled.
 [TI ADS7828 datasheet](https://www.ti.com/lit/ds/symlink/ads7828.pdf).
 
 IC1 VREF is labelled `Overcurrent Input`, but has no other node in the exported
-netlist. It is a reference output, not a fault flag. The current firmware's
-VOUT-minus-VREF calculation therefore cannot run unchanged on this wiring.
+netlist. It is a reference output, not a fault flag. The firmware's
+VOUT-minus-VREF calculation at the time of this review would need changing
+for this wiring.
 [Allegro ACS37010 product description](https://www.allegromicro.com/en/products/sense/current-sensor-ics/integrated-current-sensors/acs37010).
 
-## 3. TFT connection — verify the actual cable pin-for-pin
+## 3. TFT connections
 
-Your stated display remains the 7-inch SSD1963, 800 × 480, in confirmed 8-bit
-mode. The PCB uses a **74HC595 shift register**, not the TTGO demo's eight
+The specified display is a 7-inch SSD1963, 800 × 480, with 8-bit mode
+confirmed by the team. The PCB uses a **74HC595 shift register**, not the TTGO demo's eight
 direct GPIO data outputs. The driver must shift a byte into U9, latch it, then
 issue the TFT write strobe with the required control levels.
 
@@ -126,10 +129,9 @@ notes, a same-number straight-through connection has these mismatches:
 | 20 | GND | NC / touch interrupt |
 | 21–28 | U9 QH through QA | DB0 through DB7 |
 
-This is a **conditional comparison**, not proof of your exact panel model.
-Confirm the panel markings and the actual harness before connecting power.
-In particular, do not put 5 V on a module's EX_3.3V input. A deliberate custom
-harness could change the mapping; its complete mapping must be supplied.
+This comparison only applies if the fitted module matches those models.
+Check its markings and the harness before connecting power. Do not put 5 V
+on EX_3.3V. Record the full pin mapping if a custom harness is used.
 [LCDWiki module pin definitions](https://www.lcdwiki.com/7.0inch_16BIT_Module_SSD1963).
 
 J3 control signals in the PCB are GPIO4 → pin 4, GPIO5 → pin 6,
@@ -140,11 +142,11 @@ repair missing power or WR connections.
 
 ## 4. Final-board software map extracted from the files
 
-This table records the uploaded design, not an approved wiring recommendation.
+This table records the design-file connections before any proposed corrections.
 
-| Function | Uploaded design |
+| Function | Design-file connection |
 |---|---|
-| MCU | U1 ESP32-WROOM-32E; user confirms N4 variant |
+| MCU | U1 ESP32-WROOM-32E; N4 variant specified by the team |
 | ADC I²C SDA / SCL | GPIO33 / GPIO32 |
 | ADC address | U7 A0=A1=GND → 7-bit address 0x48 |
 | ADC CH0 / CH1 | Current VOUT / voltage divider |
@@ -165,9 +167,9 @@ the correct RTD calculation and check excitation/self-heating. Confirm which
 of the six connectors measure MOSFET/heatsink temperature and which are external.
 [TE NB-PTCO-006 product details](https://www.te.com/en/product-NB-PTCO-006.html).
 
-## 5. What needs changing in the firmware
+## 5. Firmware changes identified on 29 September
 
-| File / area | Current state | Required final-board work |
+| File / area | State at time of review | Required final-board work |
 |---|---|---|
 | `main/project_config.hpp` | Simulation enabled; internal-ADC and PWM placeholders | Replace with approved external-ADC/DAC/TFT mapping and measured calibration values. Keep hardware locks until verified. |
 | `main/hardware.cpp` | ESP32 internal ADC, NTC conversion, PWM output | Add ADS7828 acquisition and MCP4922 reference writes; use the actual probe model. |
@@ -176,9 +178,9 @@ of the six connectors measure MOSFET/heatsink temperature and which are external
 | CC/CV control | Simulation PI loop adjusts a generic output level | Review against the analogue CC/CV loops and two DAC references; do not blindly replace PWM duty with a DAC code. |
 | Protection | Code assumes an independent load-enable GPIO | Agree on a physical default-OFF shutdown path and fault behaviour before enabling real output. |
 
-The requested full-screen layout is still feasible: keep a simple 400 × 240
-logical canvas and scale it to the full 800 × 480 panel. The new transport's
-speed and RAM use need testing; do not promise the TTGO demo's refresh rate.
+A 400 × 240 drawing buffer can be scaled to the full 800 × 480 panel.
+The shift-register transport's speed and RAM use need testing; refresh rates
+from the TTGO demo cannot be assumed for this board.
 
 ### Programming and shutdown checks
 
@@ -193,7 +195,7 @@ speed and RAM use need testing; do not promise the TTGO demo's refresh rate.
   split-supply reference and ground return. R18 is still valued only `R`.
   These need hardware-team review; the analogue-loop stability was not audited.
 
-## Next information needed from the group
+## Open questions
 
 1. Does the assembled/manufactured board match this ZIP, or have the divider,
    GPIO34/35, encoder pull-ups and ADC COM already been corrected?

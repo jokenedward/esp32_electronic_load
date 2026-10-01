@@ -1,53 +1,51 @@
-# Board setup — read this before connecting hardware
+# Board bring-up
 
-Updated 1 October 2026. This is a **proposed software/wiring plan**, not a
-manufacturing release or electrical safety sign-off.
+Wiring review: 1 October 2026.
 
-You said the TFT uses individual jumper wires and that you still need to confirm
-whether the uploaded ZIP matches the printed PCB. The ZIP and KiCad files have
-therefore been left unchanged. Use this guide with the hardware team, then enter
-the approved values in `main/project_config.hpp`.
+The TFT connection uses individual jumper wires. The printed PCB revision still
+needs to be checked against `Final PCB Design (Printed).zip`. The pin assignments
+and component changes below are proposals pending that check and hardware-team
+approval. Enter the agreed values in `main/project_config.hpp`.
 
-## 1. What you can do now
+## 1. Test setup
 
-Build the default **Simulation** firmware and run the computer-side tests.
-Explore menus over serial on electrically checked logic hardware.
-All hardware-verification flags, TFT and encoder options are false by default.
+Start with Simulation and the host tests. Menus can be checked over serial once
+the logic hardware is electrically safe. TFT, encoder and hardware-verification
+flags are false by default.
 
 Do not connect the load source or energize the MOSFET power stage during GUI,
 ADC or DAC bench testing. **Physically isolate it** using an agreed hardware
 method. The code not driving a DAC does not prove an analogue circuit is off.
 
-No single flag enables real load operation. The current application deliberately
-refuses physical load output even after all verification flags are true.
+The application blocks physical load control in all three test modes, even
+with the hardware-verification flags enabled.
 
-## 2. Ask the group to confirm these first
+## 2. PCB checks
 
 | Check | Why it matters |
 |---|---|
-| Does this board match `ProgramableLoad_PCB_1.1` in the ZIP? | All findings and proposed changes depend on that |
-| Actual R7/R8 values and orientation | Uploaded 1 MΩ top / 10 MΩ bottom is unsafe |
-| Has U7 COM been grounded correctly? | Uploaded ADS7828 COM is unconnected |
+| Printed board matches `ProgramableLoad_PCB_1.1` in the ZIP | Required before applying this pin map or rework |
+| Actual R7/R8 values and orientation | Design files show an unsafe 1 MΩ top / 10 MΩ bottom divider |
+| U7 COM has the correct ground connection | ADS7828 COM is unconnected in the design files |
 | Are GPIO34/35 clock/data assignments corrected? | These are input-only pins |
-| Are encoder pull-ups 3.3 V now? | Uploaded R33/R34/R35 pull ESP32 inputs to 5 V |
-| Is current-sensor VOUT conditioned before CH0? | Uploaded 5 V sensor connects directly to ADC |
-| DAC logic levels, CS at reset and output-off method | Uploaded arrangement is not a verified safe interface |
+| Encoder pull-ups are 3.3 V | R33/R34/R35 connect ESP32 inputs to 5 V in the design files |
+| Current-sensor VOUT is conditioned before CH0 | The design connects the 5 V sensor directly to the ADC |
+| DAC logic levels, CS at reset and output-off method | Level conversion and shutdown behaviour need checking |
 | Actual screen pin labels and power/backlight requirements | J3 pin numbers cannot be assumed to match the TFT |
 | Temperature-probe connector roles and fitted type | Code assumes Pt1000; proposed roles need confirmation |
 | EN/GPIO0 access and common ground references | Required for reliable programming and measurements |
 
-The detailed original evidence is in
-[the dated PCB audit](final_pcb_firmware_review_2026-09-29.md).
-Also resolve the audit's J2 ground-reference, unvalued R18 and programming-reset
-issues with the hardware team.
+The [29 September PCB review](final_pcb_firmware_review_2026-09-29.md)
+lists the net connections behind these findings. Its J2 ground-reference,
+unvalued R18 and programming-reset issues also need resolving.
 
-## 3. Proposed corrected signals
+## 3. Proposed GPIO map
 
 GPIO numbers below refer to **ESP32 GPIO names**, not module-pad numbers.
-They replace the earlier TTGO/S3 mapping. Do not reconnect GPIO44: the original
-ESP32 module does not have it.
+This map is for the original ESP32, not the TTGO/S3 prototype. GPIO44 is not
+available on this module.
 
-| Function | GPIO in updated configuration | Physical action/check |
+| Function | Proposed GPIO | Wiring check/change |
 |---|---|---|
 | ADC SDA / SCL | 33 / 32 | Existing I2C wiring; verify 3.3 V pull-ups |
 | Shared TFT/DAC clock | 19 | Move clock from GPIO34 |
@@ -102,18 +100,18 @@ Do not assume unused DB8–DB15, touch or SD pins need wiring; follow the module
 actual interface configuration.
 
 Supply the TFT only through its verified power pins, and connect logic grounds
-correctly. Keep your externally powered backlight on the module's approved
+correctly. Keep the externally powered backlight on the module's approved
 backlight circuit. Do not infer LED_A voltage/current from its name or use a
-GPIO as its supply. The uploaded J3 power-pin assignments do not match the
+GPIO as its supply. The J3 power-pin assignments in the design do not match the
 conditional MRB7963-style comparison in the audit.
-[LCDWiki module pin table — compare against your actual module](https://www.lcdwiki.com/7.0inch_16BIT_Module_SSD1963).
+[LCDWiki module pin table](https://www.lcdwiki.com/7.0inch_16BIT_Module_SSD1963).
 
 ## 4. Voltage input: required hardware correction
 
-The uploaded divider gives approximately 27.27 V at the ADC for a 30 V input.
-Do not apply that input to test it. Swapping the uploaded resistors is not enough.
+The divider in the design files gives approximately 27.27 V at the ADC for a
+30 V input. Do not apply that input. Swapping R7 and R8 is not enough.
 
-The software proposes **12 kΩ top / 1 kΩ bottom**:
+The proposed values in the configuration are **12 kΩ top / 1 kΩ bottom**:
 
 `ADC voltage = input voltage / 13`
 
@@ -128,28 +126,28 @@ in voltage-only mode. Software rejecting a clipped reading cannot protect an
 over-voltage input.
 [TI ADS7828 reference/input specifications](https://www.ti.com/lit/ds/symlink/ads7828.pdf).
 
-## 5. Current and temperature: later stages
+## 5. Current and temperature inputs
 
 - Current: the proposed ADC-only 10 kΩ / 10 kΩ divider halves VOUT.
   Do not alter the analogue CC feedback branch without redesigning its scaling.
   Confirm ADC drive/settling and protection, calibrate zero and sensitivity.
 - Temperature: proposed CH2/3 = heatsinks and CH4–7 = four external Pt1000 probes.
-  Physically confirm this; the uploaded connector names alone do not establish it.
+  Confirm the fitted probes and connector roles before using this assignment.
 - With a 3.3 V supply and 1 kΩ pull-up, a Pt1000 at 0 °C dissipates approximately
   2.7 mW. Check the resulting self-heating against the sensor datasheet and
   mounting before accepting temperature accuracy.
   [TE sensor details](https://www.te.com/en/product-NB-PTCO-006.html).
 
-Neither current nor temperature engineering values are treated as valid until
-their individual interface flags are true. Raw ADC diagnostics are available
-in SensorMonitor after the ADC interface has been verified.
+Current and temperature readings stay unavailable until their interface flags
+are true. SensorMonitor provides raw ADC diagnostics once the ADC interface
+has been checked.
 
-## 6. Enable one stage at a time
+## 6. Test sequence
 
-Do not set a flag just to remove an error message. It records a completed
-physical check. Rebuild after changing configuration.
+Set each verification flag only after its physical checks are complete.
+Rebuild after changing the configuration.
 
-### Stage A — GUI only, with fake readings
+### A. Menus with simulated readings
 
 After the power stage is physically isolated and the corrected clock/DAC-CS/TFT
 wiring is approved, keep `kTestMode = TestMode::Simulation` and set:
@@ -162,11 +160,11 @@ For the rotary encoder, also verify 3.3 V levels and set
 `kEncoder3v3Verified = true`, `kUseEncoder = true`.
 Otherwise use serial menu keys. Keep ADC and DAC verification flags false.
 
-Test all menus, saving/cancelling settings and Start/Stop. The first screen
-transfer fills all 800 × 480 pixels; allow time for the software bus to repaint.
-A compile success does not verify panel timings, colors, orientation or speed.
+Test all menus, save/cancel and Start/Stop. The first transfer writes all
+800 × 480 pixels; allow time for the software bus to repaint. Check the panel
+timings, colours, orientation and refresh speed on the actual display.
 
-### Stage B — voltage display and recording
+### B. Voltage display and recording
 
 After **all ADC input levels**, reference/COM and divider have been checked:
 
@@ -184,14 +182,14 @@ Start now means **record voltage**, not start drawing current.
 Stop ends recording. A timer can end recording too. Download before the next
 Start, because a new run replaces the previous CSV.
 
-### Stage C — all sensors
+### C. All sensors
 
 Select `TestMode::SensorMonitor` only after safe inputs are confirmed.
 Enable current and temperature conversion flags only after calibration and
 connector-role checks. Verify probe disconnects and implausible/clipped values.
 There is still no physical load operation.
 
-### Stage D — isolated DAC bench test and later real control
+### D. DAC bench test and load control
 
 The application does not call the bench DAC class. A separate, reviewed test
 must verify channel outputs with the power stage disconnected before integrating
@@ -209,9 +207,8 @@ default-OFF hardware kill path, mode/reference behaviour, stability, maximum
 ratings and thermal limits before adding physical load control. Only then
 plan supervised low-power tests and subsequent full-system qualification.
 
-## 7. What this update does not prove
+## 7. Remaining hardware tests
 
-It does not validate the manufactured PCB, ADC accuracy, MOSFET safe operating
-area, analogue-loop stability, over-temperature shutdown response, display
-refresh rate, or sustained 500 W operation. It supplies testable firmware and
-clearly separates these outstanding hardware tasks.
+The manufactured PCB, ADC accuracy, MOSFET safe operating area, analogue-loop
+stability, over-temperature shutdown response, display refresh rate and
+sustained 500 W operation have not been validated.

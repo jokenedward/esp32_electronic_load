@@ -1,80 +1,58 @@
-# Sharing and working together
+# Working on the project
 
-This repository contains the ESP32 electronic-load firmware and its software
-documentation. It does not contain the presentations, thermal models, generated
-build files or personal ESP-IDF installation paths.
+Repository: [jokenedward/esp32_electronic_load](https://github.com/jokenedward/esp32_electronic_load)
 
-## First: publish the repository
+## Setup
 
-The local repository is prepared. It is not online until someone publishes it.
-Recommended name: `elec5552-electronic-load`. Keep it private for the project team.
+1. Accept the repository invitation, if required.
+2. Clone the repository through VS Code's **Git: Clone** command.
+3. Open the `esp32_electronic_load` folder.
+4. Set up ESP-IDF 6.0.2 and build with `idf.py build`. The target is `esp32`.
+5. Run `sh tests/run_host_tests.sh` on Mac/Linux with a C++ compiler.
+   Windows users can use a suitable WSL/Linux environment for the host tests.
 
-The simplest route for the owner is VS Code:
+Each person should use their own GitHub account and Git author details.
+GitHub provides a no-reply email address in its email settings if needed.
 
-1. Open the `esp32_electronic_load` folder itself, not its parent folder.
-2. Open the Command Palette and choose **Publish to GitHub**.
-3. Sign in using your own GitHub account.
-4. Choose the repository name and **Private**.
-5. Review the files and finish publishing.
+Local ESP-IDF paths and serial-port settings belong in the ignored
+`.vscode/settings.json`. Build output is also ignored. Build locally to
+generate `build/compile_commands.json`; do not copy another person's build folder.
 
-If Git asks for your author name/email, use your own identity. For email privacy,
-copy your exact GitHub-provided no-reply address from GitHub's email settings;
-do not guess it or share a password/token in a chat.
+## Making changes
 
-Do not create a second repository if one has already been published.
-[Official VS Code publishing instructions](https://code.visualstudio.com/docs/sourcecontrol/repos-remotes#_publish-to-github).
-
-## Invite teammates
-
-On the published GitHub repository, open **Settings → Collaborators → Add people**.
-Invite your group members using their GitHub usernames. They must accept their
-invitations before contributing. Sharing a private repository's link alone does
-not give access. Each person should use their own account.
-[Official GitHub collaborator instructions](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository).
-
-## Each teammate's first setup
-
-1. Accept the invitation.
-2. Copy the repository's HTTPS URL from GitHub's **Code** menu.
-3. In VS Code, use **Git: Clone**, paste that URL and open the cloned folder.
-4. Install/configure ESP-IDF **6.0.2** using the ESP-IDF extension.
-5. In an ESP-IDF terminal, run `idf.py build`. Target: `esp32`, not `esp32s3`.
-6. On Mac/Linux with a C++ compiler, also run `sh tests/run_host_tests.sh`.
-   Windows users can run these host tests in a suitable WSL/Linux environment.
-
-Each teammate configures their own ESP-IDF installation and serial port.
-The machine-specific `.vscode/settings.json` is deliberately excluded.
-Do not upload the `build/` directory to fix missing headers; build locally so
-ESP-IDF creates your own `build/compile_commands.json`.
-
-## Simple everyday workflow
-
-Agree who is working on menus, sensors or another area before starting.
+Agree on the area being worked on before editing, especially shared files such
+as `project_config.hpp`.
 
 1. Pull the latest `main`.
-2. Create a branch for one change, such as `gui-menu-fix`.
-3. Edit and test the code.
-4. Commit only the intended files with a short explanation.
-5. Push/publish your branch.
-6. On GitHub, open a pull request into `main`.
-7. Ask a teammate to review it, then merge. Everyone pulls the updated `main`.
+2. Create a branch for the change, for example `gui-menu-fix`.
+3. Make the change and run the relevant tests.
+4. Review the changed files, stage them and commit with a short description.
+5. Push the branch and open a pull request.
+6. Get a teammate to review it before merging into `main`.
 
-A branch is your separate version of the code. A commit is a saved checkpoint.
-A pull request lets the team review a change before it joins the shared version.
-This is a recommended team workflow; branch protection has not been configured.
+Keep each pull request focused on one change. Include what was tested and any
+hardware assumptions. This is the team's recommended workflow; branch protection
+has not been configured.
 
-Use Git/VS Code to resolve conflicts carefully. Do not force-push over teammates'
-work or replace the whole project with an old downloaded ZIP.
+If Git reports a conflict, compare both changes before resolving it. Avoid
+force-pushing or replacing the project with an older ZIP.
 
-## Before sharing a change
+## Before merging
 
-- Run `idf.py build` and the host tests where available.
-- Describe what changed and what was actually tested.
-- Keep the shared default in Simulation with hardware flags false.
-- Review pin assignments, resistor values and calibration changes with the
-  hardware team; passing software tests does not verify a PCB.
-- Do not connect or enable the load-power stage just because a build passes.
-- Never commit passwords, tokens, keys or personal credentials.
+- Check that `idf.py build` succeeds.
+- Run the host tests when available.
+- Keep Simulation as the shared default, with hardware flags false.
+- Check pin, resistor and calibration changes with the hardware team.
+- Keep passwords, tokens, build output and personal settings out of commits.
 
-Use [README.md](README.md) for the file map and
-[board_bringup.md](docs/board_bringup.md) for the outstanding hardware checks.
+The safety checks in [board bring-up](docs/board_bringup.md) still apply.
+A passing build is not permission to energize the power stage.
+
+## Repository access
+
+The owner can invite teammates through **Settings → Collaborators → Add people**.
+A private repository link does not grant access on its own; invitations need to
+be accepted.
+
+Reference: [VS Code Git guide](https://code.visualstudio.com/docs/sourcecontrol/repos-remotes)
+and [GitHub collaborator guide](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository).

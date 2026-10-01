@@ -1,122 +1,117 @@
 # ESP32 Programmable Electronic Load
 
-ESP-IDF firmware for the ELEC5552 electronic load, using the **ESP32-WROOM-32E-N4**.
-This is the final-board project, not the separate TTGO/LILYGO demo.
+Firmware for the ELEC5552 electronic-load project, using an ESP32-WROOM-32E-N4
+and ESP-IDF 6.0.2.
 
-## Start here
+The interface uses a 7-inch, 800 × 480 SSD1963 TFT and one rotary encoder.
+The PCB design uses an ADS7828 ADC, ACS37010 current sensor, Pt1000 temperature
+probes and MCP4922 DAC.
 
-Working with teammates? Read [the short collaboration guide](CONTRIBUTING.md).
+## Current status
 
-The software now includes the 7-inch GUI, encoder menus, ADS7828 sensor acquisition,
-Pt1000 conversion and a separate MCP4922 bench driver. **The physical power stage
-is not enabled by this firmware.** The uploaded PCB has unresolved electrical
-issues and may not be the board your group actually printed.
+The code supports menu testing, sensor readings and CSV logging. It starts in
+simulation mode, with the TFT, encoder and real sensor interfaces disabled.
 
-Read [Board setup and checks](docs/board_bringup.md) before wiring or changing flags.
-The proposed pin map is not approval to rework a board that has not been identified.
-The KiCad files and uploaded ZIP have not been changed.
+**Physical load control is not enabled.** The PCB revision, wiring corrections
+and analogue CC/CV circuit still need to be checked. Keep the power stage
+disconnected during initial GUI and sensor tests.
+See [board bring-up](docs/board_bringup.md) before enabling hardware.
 
-## Three test modes
+## Build
 
-Choose `kTestMode` in `main/project_config.hpp`:
-
-| Mode | What it does | What Start does |
-|---|---|---|
-| `Simulation` (default) | Generates fake voltage/current/temperatures | Runs and logs the simulated CC/CV load |
-| `VoltageMonitor` | Reads only ADS7828 CH1 | Records measured voltage; no physical output |
-| `SensorMonitor` | Reads the eight ADC channels; converts verified sensors | Records available measurements; no physical output |
-
-Default TFT, encoder and hardware-verification flags are all **false**. This lets
-you build and explore menus over serial without assuming the PCB is safe.
-The GUI labels simulated data. Missing real measurements appear as `--`, not zero.
-Protection settings act on the simulated load only; monitor modes are not a
-physical protection system.
-
-## What belongs in this repository
-
-Keep `main/` (firmware), `tests/`, the current setup/safety notes in `docs/`,
-the CMake files, `sdkconfig`, `sdkconfig.defaults`, `partitions.csv`, and the
-README, collaboration guide and license. The hidden Git and VS Code folders
-support version control and editing; personal editor settings are not uploaded.
-
-Presentations, thermal models, old build folders and superseded hardware reports
-have been moved to a separate local archive outside this repository.
-No firmware source files were removed.
-
-`idf.py build` recreates `build/` when needed. It remains ignored by Git.
-After a cleanup or fresh clone, build once to regenerate the compiler include
-paths used by VS Code.
-
-## Files in plain language
-
-| File in `main/` | Purpose |
-|---|---|
-| `project_config.hpp` | Test mode, proposed pins, resistor values and verification flags |
-| `app_main.cpp` | Startup, Start/Stop, system state and periodic work |
-| `hardware.cpp` | Chooses fake or real measurements; keeps real load control locked |
-| `board_drivers.cpp` | Low-level ADS7828, MCP4922 and 74HC595 communication |
-| `sensor_math.cpp` | Turns ADC values into voltage, current and Pt1000 temperature |
-| `menu_model.cpp` | Menu navigation and setting edits |
-| `tft_ui.cpp` | Encoder/serial inputs and arranging the screen |
-| `display.cpp` | Sends the full 800 × 480 image to the SSD1963 |
-| `load_control.cpp` | Simulated CC/CV control and protection decisions |
-| `data_logger.cpp` | Records CSV and downloads it through USB/UART |
-| `system_types.hpp/.cpp` | Shared settings, measurements and error names |
-
-Corresponding `.hpp` files declare what the `.cpp` files provide.
-The small built-in font is in `font_5x7.hpp`. No Arduino or GUI framework is required.
-
-## Build and test
-
-Open **this folder** in VS Code with the ESP-IDF extension. Use an ESP-IDF terminal:
+Open this folder in VS Code with the ESP-IDF extension. In an ESP-IDF terminal:
 
 ```sh
 idf.py build
 ```
 
-The current target is `esp32`, with 4 MB flash for the N4 module.
-The existing 1 MB application partition and storage layout are retained.
-The N4 flash size is documented in the
-[Espressif module datasheet, series comparison](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf).
+Use the `esp32` target, not `esp32s3`. The configuration uses 4 MB flash for the
+N4 module, with a 1 MB application partition.
+[ESP32-WROOM-32E datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf).
 
-Computer-side tests (Mac/Linux with a C++ compiler):
+Build files are generated in `build/` and excluded from Git. Building also
+generates the compiler information used by VS Code, so build once after cloning.
+Each person needs their own ESP-IDF installation and serial-port settings.
+
+For the USB-UART wiring and flashing steps, see
+[programming the ESP32](docs/esp32_programming_connection.md).
+
+## Test modes
+
+Set `kTestMode` in `main/project_config.hpp`:
+
+| Mode | Behaviour |
+|---|---|
+| `Simulation` | Generates simulated readings and runs the simulated CC/CV controller |
+| `VoltageMonitor` | Reads voltage from ADS7828 CH1 |
+| `SensorMonitor` | Reads all eight ADC channels and converts the verified sensor inputs |
+
+Start runs the simulation or begins recording measured values, depending on the
+mode. None of these modes drives the physical load. Protection settings apply
+to the simulation; the monitor modes are for measurement and recording only.
+
+Hardware flags stay false until the corresponding wiring checks are complete.
+The display labels simulated data and shows `--` for unavailable readings.
+
+## Files
+
+| File in `main/` | Purpose |
+|---|---|
+| `app_main.cpp` | Startup, run state and application loop |
+| `project_config.hpp` | Test mode, proposed GPIO assignments and calibration values |
+| `hardware.cpp` | Simulated or measured sensor readings; blocks physical load control |
+| `board_drivers.cpp` | ADS7828, MCP4922 and 74HC595 communication |
+| `sensor_math.cpp` | Voltage, current and Pt1000 calculations |
+| `menu_model.cpp` | Menu navigation and setting changes |
+| `tft_ui.cpp` | Encoder/serial input and screen layout |
+| `display.cpp` | SSD1963 initialization and full-screen drawing |
+| `load_control.cpp` | Simulated CC/CV control and protection checks |
+| `data_logger.cpp` | CSV recording and serial download |
+| `system_types.hpp/.cpp` | Settings, measurements, states and error names |
+
+The `.hpp` files contain declarations shared between source files.
+`font_5x7.hpp` contains the display font. Tests are in `tests/`; setup and
+hardware notes are in `docs/`. Presentations and thermal models are kept separately.
+
+## Controls
+
+- Turn: move through a menu or change the selected value.
+- Short press: select, edit or save. On the live screen: Start, Stop or Acknowledge.
+- Hold for at least 0.7 seconds, then release: go back or cancel an edit.
+
+Serial menu keys are `n` (next), `p` (previous), `e` (select) and `b` (back).
+Shortcuts are `s` (start simulation/recording), `x` (stop), `a` (acknowledge)
+and `d` (download CSV).
+
+Menus cover live readings, mode/setpoint, protection, automatic stops, external
+probes, log download and ADC diagnostics. Settings can only change while stopped.
+Each new recording replaces the previous CSV, so download it first if needed.
+
+## Tests
+
+On Mac or Linux with a C++ compiler:
 
 ```sh
 sh tests/run_host_tests.sh
 ```
 
-These test calculations, menus, encoder decoding, simulated CC/CV behaviour and
-protection logic. They do **not** test real wiring, screen timing or safe load control.
-See [the verification record](docs/software_validation_2026-10-01.md) for checks performed.
-For flashing, use [Programming connection](docs/esp32_programming_connection.md)
-only after the electrical checks. No board was flashed during this update.
+The tests cover sensor calculations, menu edits, encoder decoding, simulated
+CC/CV behaviour and protection checks. Build results and hardware tests still
+outstanding are listed in the [test record](docs/software_validation_2026-10-01.md).
 
-## Controls
+## Remaining work
 
-- Turn encoder: move selection; while editing, change the value.
-- Short press: open/select/edit/save. On Live Measurements: Start/Stop/Acknowledge.
-- Hold for at least 0.7 seconds and release: Back, or cancel an edit.
-- Serial equivalents: `n` next, `p` previous, `e` select, `b` back.
-- Serial shortcuts: `s` simulate/record, `x` stop, `a` acknowledge, `d` download CSV.
+- Confirm the printed PCB revision and complete the wiring corrections.
+- Calibrate the sensor inputs and check the display and encoder on the board.
+- Verify the hardware shutdown circuit and analogue CC/CV loops.
+- Check physical setpoint resolution and complete electrical/thermal testing.
 
-Menus: Live Measurements, Mode and Setpoint, Protection, Auto Stop,
-External Probes, Log Download, ADC Diagnostics. Settings cannot change during a run.
-Download before starting another recording: a new recording replaces the old CSV.
+Operation at 30 V, 30 A and 500 W has not been validated.
 
-## Still required for the final project
-
-Approved wiring and calibration; a verified default-OFF hardware shutdown path;
-validated analogue CC/CV reference mapping and stability; setpoint-resolution
-checks; thermal/electrical testing; and physical GUI/encoder testing.
-A successful build is not proof of 30 V / 30 A / 500 W operation.
-
-More detail: [drivers](docs/driver_documentation.md),
-[code flow](docs/software_architecture.md), [states](docs/state_machine.md).
-Dated audit documents describe the files at the time of each audit, not the
-current firmware.
+For more detail, see [driver notes](docs/driver_documentation.md),
+[code flow](docs/software_architecture.md) and [run states](docs/state_machine.md).
+The [contribution guide](CONTRIBUTING.md) covers the team's GitHub workflow.
 
 ## License
 
-MIT. See `LICENSE`.
-# esp32_electronic_load
-# esp32_electronic_load
+[MIT](LICENSE).

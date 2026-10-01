@@ -1,45 +1,51 @@
-# How the code runs
+# Code flow
 
-One ESP-IDF component, `main`, contains a few small parts. Start reading
-`app_main.cpp`, then `hardware.cpp`, then `menu_model.cpp`.
+The firmware is one ESP-IDF component, `main`. `app_main.cpp` owns the system
+state and coordinates measurements, commands and logging.
 
 ## Startup
 
-1. Select the configured test mode.
-2. Initialize simulated measurements, or the verified ADC interface.
+1. Read the configured test mode.
+2. Initialize the simulation or the verified ADC interface.
 3. Initialize CSV storage and UI queues.
-4. Start input, screen and application tasks.
+4. Start the input, screen and application tasks.
 5. Enter IDLE.
 
-No application path sends DAC reference commands; the display bus holds DAC CS inactive.
-A firmware lock does not electrically switch off an unsafe power stage.
+The application does not send DAC reference commands. When the display bus is
+used, it keeps DAC CS inactive. The power stage still needs to be physically
+isolated for initial testing.
 
 ## Application loop
 
-1. Read measurements and their validity flags.
-2. Handle Start, Stop, Acknowledge, Apply Settings or Download.
-3. If running a simulation, check protections and calculate simulated CC/CV demand.
-4. If recording real measurements, check voltage validity and the recording timer.
-5. Publish a status snapshot for the screen.
-6. Print status and append CSV approximately once per second.
+1. Read measurements and check their validity flags.
+2. Handle Start, Stop, Acknowledge, Apply Settings and Download commands.
+3. In Simulation, check protection limits before updating the simulated CC/CV output.
+4. In a monitor mode, check voltage validity and the recording timer.
+5. Send a status snapshot to the UI.
+6. Print status and write CSV approximately once per second.
 
-Simulation has a 10 ms target period. Real measurement modes use 50 ms; a bus
-timeout can make a cycle longer. These are scheduling targets, not verified
-real-time protection guarantees.
+The target loop period is 10 ms in Simulation and 50 ms in the monitor modes.
+An I2C timeout can extend a cycle, so these periods are not guaranteed hardware
+protection response times.
 
-## UI work
+## Input and display
 
-The input task polls encoder/serial input every 2 ms. The screen task interprets
-menu events and repaints when needed. It receives snapshots rather than sharing
-mutable application settings. Menu edits become commands; settings are accepted
-only while stopped. The slow TFT transfer yields between rows.
+The input task polls the encoder and serial input every 2 ms. The screen task
+handles menu events and drawing. The application task processes setting changes,
+which are only accepted while stopped.
 
-Low-level bus code lives in `board_drivers.cpp`. Sensor calculations and menu
-behaviour are separate from ESP-IDF, allowing computer-side tests.
+Queues pass commands and status copies between tasks. This keeps the TFT
+transfer out of the application loop. The display task yields between rows
+during a repaint.
 
-## Deliberate limits
+`board_drivers.cpp` handles communication with the devices. Sensor calculations
+and menu logic are separate from ESP-IDF so they can be tested on a computer.
 
-Real modes only observe and record. Their menu setpoints do not control the load,
-and their protection settings are not a live hardware shutdown system.
-The future real-control implementation must use the approved analogue-loop and
-default-OFF shutdown design, not merely rename the simulated output as a DAC value.
+## Physical load control
+
+The monitor modes only measure and record. Their setpoints do not drive the load,
+and their protection settings do not trigger a physical shutdown.
+
+Real control still needs the approved analogue-loop reference mapping and a
+default-OFF shutdown circuit. The simulation's output value cannot be used
+directly as a DAC code.

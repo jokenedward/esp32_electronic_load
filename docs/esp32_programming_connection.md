@@ -2,14 +2,12 @@
 
 ## Recommended software
 
-Use VS Code with Espressif's official **ESP-IDF** extension. The extension builds,
-flashes and monitors this existing CMake project without converting it to Arduino.
+Use VS Code with Espressif's ESP-IDF extension to build, flash and monitor the
+project. The firmware uses ESP-IDF, not Arduino.
 
-PlatformIO is possible because it supports `framework = espidf`, but it should be
-treated as an alternative toolchain, not used at the same time as the ESP-IDF
-extension. Different toolchains can select different ESP-IDF versions and produce
-different build folders. The official ESP-IDF extension is the simplest choice for
-this project.
+PlatformIO also supports `framework = espidf`, but these instructions use the
+ESP-IDF extension and version 6.0.2. Avoid switching between the two setups for
+the same working copy, since they can use different SDK versions and build folders.
 
 ## Parts needed for the final PCB connection
 
@@ -47,9 +45,8 @@ the serial controls and CSV download already implemented in the firmware.
 
 ## Manual flashing with the MCP2200
 
-The MCP2200 exposes RTS/CTS flow-control signals but no separate DTR output in its
-standard pinout. The simplest reliable first PCB therefore uses manual BOOT and
-RESET buttons instead of an automatic programming circuit.
+The MCP2200 has RTS/CTS flow-control signals but no separate DTR output in its
+standard pinout. These steps use manual BOOT and RESET controls.
 
 1. Connect the PCB to the computer by USB.
 2. In VS Code, run `ESP-IDF: Select Port to Use` and select the MCP2200 serial port.
@@ -61,18 +58,18 @@ RESET buttons instead of an automatic programming circuit.
 For a first test, keep `kTestMode = TestMode::Simulation` in
 `main/project_config.hpp`, connect only electrically checked logic/USB power,
 and physically isolate the power MOSFET stage. A software flag is not a hardware
-shutdown. See [the board checks](board_bringup.md) before powering the uploaded PCB.
+shutdown. Complete [the board checks](board_bringup.md) before powering the PCB.
 
 ## Current final-board configuration
 
 The project is built for the original `esp32` target, not `esp32s3`, using
-ESP-IDF 6.0.2 and 4 MB flash for the N4 module. No Arduino conversion is required.
-The uploaded design identifies ADS7828 acquisition, MCP4922 references,
+ESP-IDF 6.0.2 and 4 MB flash for the N4 module.
+The PCB design uses ADS7828 acquisition, MCP4922 references,
 Pt1000 probes and a 74HC595-to-SSD1963 display bus.
 
 Before enabling any hardware flags, confirm:
 
-- That the uploaded PCB is the actual printed revision.
+- That the design files match the printed PCB revision.
 - The corrected pin map and individual TFT jumper connections.
 - Safe ADC divider/current input levels and COM/reference wiring.
 - Encoder 3.3 V pull-ups and Pt1000 connector roles/calibration.
