@@ -94,14 +94,6 @@ The tests cover sensor calculations, menu edits, encoder decoding, simulated
 CC/CV behaviour and protection checks. Build results and hardware tests still
 outstanding are listed in the [test record](docs/software_validation_2026-10-01.md).
 
-## Remaining work
-
-- Confirm the printed PCB revision and complete the wiring corrections.
-- Calibrate the sensor inputs and check the display and encoder on the board.
-- Verify the hardware shutdown circuit and analogue CC/CV loops.
-- Check physical setpoint resolution and complete electrical/thermal testing.
-
-Operation at 30 V, 30 A and 500 W has not been validated.
 
 For more detail, see [driver notes](docs/driver_documentation.md),
 [code flow](docs/software_architecture.md) and [run states](docs/state_machine.md).
