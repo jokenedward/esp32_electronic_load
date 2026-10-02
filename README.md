@@ -94,11 +94,3 @@ The tests cover sensor calculations, menu edits, encoder decoding, simulated
 CC/CV behaviour and protection checks. Build results and hardware tests still
 outstanding are listed in the [test record](docs/software_validation_2026-10-01.md).
 
-
-For more detail, see [driver notes](docs/driver_documentation.md),
-[code flow](docs/software_architecture.md) and [run states](docs/state_machine.md).
-The [contribution guide](CONTRIBUTING.md) covers the team's GitHub workflow.
-
-## License
-
-[MIT](LICENSE).
