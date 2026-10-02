@@ -12,11 +12,6 @@ probes and MCP4922 DAC.
 The code supports menu testing, sensor readings and CSV logging. It starts in
 simulation mode, with the TFT, encoder and real sensor interfaces disabled.
 
-**Physical load control is not enabled.** The PCB revision, wiring corrections
-and analogue CC/CV circuit still need to be checked. Keep the power stage
-disconnected during initial GUI and sensor tests.
-See [board bring-up](docs/board_bringup.md) before enabling hardware.
-
 ## Build
 
 Open this folder in VS Code with the ESP-IDF extension. In an ESP-IDF terminal:
