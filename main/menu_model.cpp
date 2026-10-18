@@ -31,11 +31,12 @@ int RotaryDecoder::update(uint8_t state, int transitions)
 int MenuModel::field_count() const
 {
     switch (screen) {
-    case Screen::Main: return 7;
-    case Screen::Mode: return 3;
-    case Screen::Protection: return 4;
-    case Screen::AutoStop: return 9;
-    case Screen::Probes: return 8;
+    case Screen::Main: return 6;
+    case Screen::Live: return 2;
+    case Screen::Mode: return 4;
+    case Screen::Protection: return 5;
+    case Screen::AutoStop: return 10;
+    case Screen::Probes: return 9;
     case Screen::Logs: return 2;
     default: return 1;
     }
@@ -50,69 +51,94 @@ const char *MenuModel::title() const
     case Screen::AutoStop: return "AUTO STOP";
     case Screen::Probes: return "EXTERNAL PROBES";
     case Screen::Logs: return "LOG DOWNLOAD";
-    case Screen::Adc: return "ADC DIAGNOSTICS";
     }
     return "";
 }
 
+void MenuModel::go_back(const LoadSettings &settings)
+{
+    choosing_edit_action = false;
+    if (editing) {
+        editing = false;
+        draft = settings;
+        message = "EDIT CANCELLED";
+    } else if (screen != Screen::Main) {
+        selected = static_cast<int>(screen) - 1;
+        screen = Screen::Main;
+    }
+}
+
 bool MenuModel::handle(UiEvent event, const SystemStatus &status, UiCommand *command)
 {
-    if (!command || event == UiEvent::None) return false;
+    if (!command || event == UiEvent::None || event == UiEvent::Refresh) return false;
     if (save_pending_ && status.settings_revision != saved_revision_)
         save_pending_ = false;
     message = "";
     if (event == UiEvent::Back) {
-        if (editing) { editing = false; draft = status.settings; message = "EDIT CANCELLED"; }
-        else { screen = Screen::Main; selected = 0; }
+        go_back(status.settings);
         return false;
     }
     if (event == UiEvent::Next || event == UiEvent::Previous) {
         const int direction = event == UiEvent::Next ? 1 : -1;
-        if (editing) adjust(direction);
+        if (editing && choosing_edit_action)
+            edit_action = (edit_action + direction + 2) % 2;
+        else if (editing) adjust(direction);
         else selected = (selected + direction + field_count()) % field_count();
         return false;
     }
     if (event != UiEvent::Select) return false;
+    // Match the encoder's immediate Stop behaviour on every page.
+    if (run_is_active(status.state)) {
+        command->type = UiCommandType::Stop;
+        return true;
+    }
+    if (editing) {
+        if (!choosing_edit_action) {
+            choosing_edit_action = true;
+            edit_action = 0;
+            return false;
+        }
+        if (edit_action == 1) {
+            go_back(status.settings);
+            return false;
+        }
+        if (!settings_are_valid(draft)) {
+            message = "INVALID LIMITS - SELECT BACK";
+            return false;
+        }
+        editing = choosing_edit_action = false;
+        command->type = UiCommandType::ApplySettings;
+        command->settings = draft;
+        saved_revision_ = status.settings_revision;
+        save_pending_ = true;
+        message = "SETTING SENT";
+        return true;
+    }
     if (screen == Screen::Main) {
         screen = static_cast<Screen>(selected + 1);
         selected = 0;
         draft = status.settings;
         return false;
     }
+    if (selected == field_count() - 1) {
+        go_back(status.settings);
+        return false;
+    }
     if (screen == Screen::Live) {
-        command->type = status.state == RunState::Running ? UiCommandType::Stop :
-                        status.state == RunState::Fault ? UiCommandType::Acknowledge :
-                                                         UiCommandType::Start;
+        command->type = status.state == RunState::Fault ?
+            UiCommandType::Acknowledge : UiCommandType::Start;
         return true;
     }
-    if (screen == Screen::Adc) return false;
     if (screen == Screen::Logs) {
-        if (selected == 1) { screen = Screen::Main; selected = 0; return false; }
-        if (status.state == RunState::Running) { message = "STOP BEFORE DOWNLOAD"; return false; }
         command->type = UiCommandType::DownloadLog;
         return true;
     }
-    if (status.state == RunState::Running) {
-        message = "STOP BEFORE EDITING";
-        editing = false;
-        return false;
-    }
-    if (!editing) {
-        // Wait for the application to receive the previous edit. A fast second
-        // edit must not overwrite it with settings from an older snapshot.
-        if (save_pending_) { message = "WAIT FOR SETTING TO APPLY"; return false; }
-        draft = status.settings;
-        editing = true;
-        return false;
-    }
-    if (!settings_are_valid(draft)) { message = "INVALID LIMITS - EDIT OR BACK"; return false; }
-    editing = false;
-    command->type = UiCommandType::ApplySettings;
-    command->settings = draft;
-    saved_revision_ = status.settings_revision;
-    save_pending_ = true;
-    message = "SETTING SENT";
-    return true;
+    // Wait for the application to receive the previous edit before starting another.
+    if (save_pending_) { message = "WAIT FOR SETTING TO APPLY"; return false; }
+    draft = status.settings;
+    editing = true;
+    choosing_edit_action = false;
+    return false;
 }
 
 void MenuModel::adjust(int direction)
@@ -163,13 +189,19 @@ void MenuModel::field_text(int index, char *label, unsigned ln, char *value, uns
         std::snprintf(value, vn, "%.2f %s", static_cast<double>(amount)/1000, unit);
     };
     text("", "");
+    if (index < 0 || index >= field_count()) return;
+    if (screen != Screen::Main && index == field_count() - 1) {
+        text("BACK", "");
+        return;
+    }
     switch (screen) {
     case Screen::Main: {
         static constexpr const char *items[] = {"LIVE MEASUREMENTS", "MODE AND SETPOINT",
-            "PROTECTION", "AUTO STOP", "EXTERNAL PROBES", "LOG DOWNLOAD", "ADC DIAGNOSTICS"};
-        if (index >= 0 && index < 7) text(items[index], "");
+            "PROTECTION", "AUTO STOP", "EXTERNAL PROBES", "LOG DOWNLOAD"};
+        if (index >= 0 && index < 6) text(items[index], "");
         break;
     }
+    case Screen::Live: text("START / STOP / ACKNOWLEDGE", ""); break;
     case Screen::Mode:
         if (index == 0) text("MODE", draft.mode == LoadMode::ConstantCurrent ? "CC" : "CV");
         if (index == 1) quantity("CURRENT TARGET", draft.current_setpoint_mA, "A");
@@ -203,7 +235,7 @@ void MenuModel::field_text(int index, char *label, unsigned ln, char *value, uns
         if (index%2) std::snprintf(value, vn, "%.1f C", draft.probe_limit_mC[index/2]/1000.0);
         else std::snprintf(value, vn, "%s", enabled(draft.probe_stop_enabled[index/2]));
         break;
-    case Screen::Logs: text(index == 0 ? "DOWNLOAD CSV OVER USB" : "BACK", ""); break;
+    case Screen::Logs: text("DOWNLOAD CSV OVER USB", ""); break;
     default: break;
     }
 }

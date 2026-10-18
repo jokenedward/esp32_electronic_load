@@ -70,10 +70,9 @@ esp_err_t Ads7828::convert(uint8_t channel, uint16_t *raw)
     return ESP_OK;
 }
 
-esp_err_t Ads7828::read(uint8_t channel, uint16_t *raw, uint32_t *millivolts)
+esp_err_t Ads7828::read(uint8_t channel, uint32_t *millivolts)
 {
-    if (!raw || !millivolts) return ESP_ERR_INVALID_ARG;
-    *raw = 0;
+    if (!millivolts) return ESP_ERR_INVALID_ARG;
     *millivolts = 0;
     uint16_t sample = 0;
     // Discard the first conversion after mux switching. This is NOT a substitute
@@ -86,18 +85,20 @@ esp_err_t Ads7828::read(uint8_t channel, uint16_t *raw, uint32_t *millivolts)
         clipped |= sample >= 4090;
         sum += sample;
     }
-    *raw = static_cast<uint16_t>((sum + cfg::kAdcSamples/2) / cfg::kAdcSamples);
-    *millivolts = (static_cast<uint32_t>(*raw) * cfg::kAdcReferenceMv + 2048) / 4096;
+    const uint32_t raw = (sum + cfg::kAdcSamples/2) / cfg::kAdcSamples;
+    *millivolts = (raw * cfg::kAdcReferenceMv + 2048) / 4096;
     // Saturation is an error, not a believable voltage/current reading.
     return clipped ? ESP_ERR_INVALID_RESPONSE : ESP_OK;
 }
 
 esp_err_t board_bus::init()
 {
+    ESP_RETURN_ON_FALSE(cfg::output_pins_valid(), ESP_ERR_NOT_SUPPORTED, kTag,
+                       "TFT/DAC blocked: PCB GPIO34/35 cannot drive outputs");
     if (!cfg::kBoardReworkVerified || !cfg::kTftWiringVerified)
         return ESP_ERR_INVALID_STATE;
     if (bus_mutex) return ESP_OK;
-    // Requires DAC CS to be physically moved off GPIO2 and pulled up safely.
+    // Requires an approved output-capable map and a safe DAC CS reset state.
     ESP_RETURN_ON_ERROR(output(cfg::kDacCs, 1), kTag, "DAC deselect");
     ESP_RETURN_ON_ERROR(output(cfg::kTftCs, 1), kTag, "LCD deselect");
     ESP_RETURN_ON_ERROR(output(cfg::kTftRd, 1), kTag, "LCD read disable");

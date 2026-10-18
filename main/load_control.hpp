@@ -26,11 +26,3 @@ private:
     float integral_{0.0F};
     uint16_t output_level_{0};
 };
-
-StopReason check_protection(
-    const Measurements &measurements,
-    const LoadSettings &settings,
-    uint32_t elapsed_s,
-    uint64_t now_us);
-
-bool is_normal_completion(StopReason reason);

@@ -1,11 +1,20 @@
 # Board bring-up
 
-Wiring review: 1 October 2026.
+GPIO baseline updated: 7 October 2026.
 
-The TFT connection uses individual jumper wires. The printed PCB revision still
-needs to be checked against `Final PCB Design (Printed).zip`. The pin assignments
-and component changes below are proposals pending that check and hardware-team
-approval. Enter the agreed values in `main/project_config.hpp`.
+The GPIO assignments in `main/project_config.hpp` now follow
+`ProgramableLoad_PCB_1.1` in `Final PCB Design (Printed).zip`, as requested.
+They describe the uploaded design, not verified working connections.
+The printed revision still needs confirmation. TFT jumpers are individual wires.
+
+The uploaded design puts the shared clock on input-only GPIO34 and DAC data
+on input-only GPIO35. Serial Simulation builds, but enabling `kUseTft` or
+`kDacBenchTestVerified` fails the output-pin compile check. The shared-bus
+initializer also rejects this map before touching GPIOs. Do not remove these checks.
+
+This update changes GPIO assignments only. The voltage/current resistor values
+and temperature roles labelled PROPOSAL in the configuration remain unverified;
+they do not claim to reproduce the unsafe analogue connections in the ZIP.
 
 ## 1. Test setup
 
@@ -39,30 +48,36 @@ The [29 September PCB review](final_pcb_firmware_review_2026-09-29.md)
 lists the net connections behind these findings. Its J2 ground-reference,
 unvalued R18 and programming-reset issues also need resolving.
 
-## 3. Proposed GPIO map
+## 3. Current GPIO map: uploaded PCB
 
 GPIO numbers below refer to **ESP32 GPIO names**, not module-pad numbers.
 This map is for the original ESP32, not the TTGO/S3 prototype. GPIO44 is not
 available on this module.
 
-| Function | Proposed GPIO | Wiring check/change |
+| Function | Current GPIO | Connection/status |
 |---|---|---|
 | ADC SDA / SCL | 33 / 32 | Existing I2C wiring; verify 3.3 V pull-ups |
-| Shared TFT/DAC clock | 19 | Move clock from GPIO34 |
-| DAC SDI | 26 | Reclaim unused SD data-in; move from GPIO35 |
-| DAC CS | 25 | Reclaim unused SD CS; move from GPIO2 |
+| Shared TFT/DAC clock | 34 | Input-only; cannot generate the clock |
+| DAC SDI | 35 | Input-only; cannot generate DAC data |
+| DAC CS | 2 | Existing PCB connection; R27 pulls LOW at reset |
 | 74HC595 SER / RCLK / OE | 18 / 16 / 17 | Existing shift-register pins |
 | TFT RS / RD | 4 / 5 | RD is held high; screen is write-only |
 | TFT CS / RESET | 12 / 14 | Verify GPIO12 stays LOW during reset/boot |
-| TFT WR | 13 | Jumper to TFT WR, not TFT F_CS |
+| TFT driver WR candidate | 13 | J3 pin 16 / Display Control 4; actual WR connection unverified |
 | Encoder A / B / push | 22 / 23 / 21 | Correct physical pull-up supply to 3.3 V |
 | ESP32 programming RX / TX | 3 / 1 | MCP2200 TX / RX respectively |
+
+### Earlier correction proposal - not selected in the code
+
+The earlier proposal was clock GPIO19, DAC data GPIO26 and DAC CS GPIO25.
+It is retained here for discussion only, not as an instruction to modify the PCB.
+It would reuse SD signals and require a verified TFT WR jumper connection.
 
 Moving a net means disconnecting its old connection where required and verifying
 continuity/isolation, not just adding wires that join the old and new GPIOs.
 **Do not cut or solder until the correct PCB is confirmed and the group approves
-the rework.** SD card use is excluded by this proposal; leave the TFT SD interface
-disconnected so it cannot conflict with GPIO25/26 or the shared clock.
+the rework.** No SD-card driver is implemented. If the earlier proposal is ever
+approved, the SD interface must remain disconnected to avoid pin conflicts.
 
 At 5 V DAC supply, 3.3 V logic HIGH is not guaranteed. Use an approved 3.3-to-5 V
 interface for DAC SCK, SDI and CS, with CS safely inactive during reset.
@@ -93,7 +108,9 @@ Use the actual TFT's **signal names**, not an assumed straight-through cable:
 This matches `kTftReverseDataBits = true`. If the approved harness instead uses
 QA→DB0 through QH→DB7, change that one flag to false.
 
-Connect the control signals from the previous table. Hold unused TFT F_CS
+This harness description is for a future approved map; the present GPIO34 clock
+cannot drive it. Verify the control signals and specifically identify TFT WR
+rather than assuming J3 pin 16 is WR. Hold unused TFT F_CS
 inactive at the appropriate logic level (normally 3.3 V HIGH on the referenced
 module); it is **not** the LCD write input. Verify display 8-bit configuration.
 Do not assume unused DB8–DB15, touch or SD pins need wiring; follow the module's
@@ -139,18 +156,24 @@ over-voltage input.
   [TE sensor details](https://www.te.com/en/product-NB-PTCO-006.html).
 
 Current and temperature readings stay unavailable until their interface flags
-are true. SensorMonitor provides raw ADC diagnostics once the ADC interface
-has been checked.
+are true. SensorMonitor displays voltage/current/temperature in normal units once
+the ADC interface has been checked. The raw-ADC screen was removed on 16 October;
+sampling, saturation checks and sensor validity checks remain in the driver.
 
 ## 6. Test sequence
+
+With the current map, use serial Simulation only for now. Stages A and D below
+cannot run without approved output-pin corrections. Stages B and C also require
+resolution of the analogue issues; changing flags alone is not sufficient.
 
 Set each verification flag only after its physical checks are complete.
 Rebuild after changing the configuration.
 
 ### A. Menus with simulated readings
 
-After the power stage is physically isolated and the corrected clock/DAC-CS/TFT
-wiring is approved, keep `kTestMode = TestMode::Simulation` and set:
+First obtain an approved output-capable GPIO map and matching wiring; the
+current uploaded-PCB map cannot run the TFT. After those changes and physical
+power-stage isolation, keep `kTestMode = TestMode::Simulation` and set:
 
 - `kBoardReworkVerified = true`
 - `kTftWiringVerified = true`
@@ -176,7 +199,8 @@ After **all ADC input levels**, reference/COM and divider have been checked:
 Start with a supervised, low, current-limited test input to the verified sensing
 circuit, keeping the load-power stage isolated. Compare the displayed voltage
 with a trusted meter at several known points. Do not start at 30 V.
-Confirm CH1 diagnostics, missing-sensor display and CSV values.
+Confirm the voltage display, missing-sensor indication and CSV values against
+known inputs and a trusted meter. Use `?` for a serial status snapshot.
 
 Start now means **record voltage**, not start drawing current.
 Stop ends recording. A timer can end recording too. Download before the next

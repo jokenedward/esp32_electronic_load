@@ -5,6 +5,10 @@
 #include "sensor_math.hpp"
 #include "menu_model.hpp"
 #include "load_control.hpp"
+#include "protection.hpp"
+#include "simulation.hpp"
+
+void protection_regression_tests();
 
 namespace {
 Measurements good_measurements()
@@ -85,7 +89,8 @@ void protection_tests()
     s = {}; s.high_voltage_cutoff_enabled = true; s.high_voltage_cutoff_mV = 11000;
     assert(check(m, s) == StopReason::HighVoltageCutoff);
     s = {}; s.low_current_cutoff_enabled = true; s.low_current_cutoff_mA = 2000;
-    assert(check(m, s) == StopReason::LowCurrentCutoff);
+    assert(check(m, s, 0) == StopReason::None);
+    assert(check(m, s, kLowCurrentStartupGraceS) == StopReason::LowCurrentCutoff);
     s = {}; s.high_current_cutoff_enabled = true; s.high_current_cutoff_mA = 500;
     assert(check(m, s) == StopReason::HighCurrentCutoff);
     s = {}; s.maximum_run_time_s = 60;
@@ -107,7 +112,7 @@ void controller_tests()
     s.current_setpoint_mA = 5000;
     uint16_t output = 0;
     for (int i = 0; i < 10000; ++i) {
-        m.current_mA = output*30000U/10000U;
+        m = simulation_measurements(output, 1000000);
         output = controller.update(m, s, 0.01F);
         assert(output <= 10000);
     }
@@ -115,19 +120,82 @@ void controller_tests()
     controller.reset(); s.mode = LoadMode::ConstantVoltage; s.voltage_setpoint_mV = 11000;
     output = 0;
     for (int i = 0; i < 10000; ++i) {
-        m.current_mA = output*30000U/10000U; m.voltage_mV = 12000-m.current_mA/10;
+        m = simulation_measurements(output, 1000000);
         output = controller.update(m, s, 0.01F);
     }
     assert(std::abs(m.voltage_mV-11000) < 10);
     m.valid = false; assert(controller.update(m, s, 0.01F) == 0);
     std::puts("PASS CC/CV simulated-plant convergence and invalid-data reset");
 }
+
+void simulation_tests()
+{
+    const auto idle = simulation_measurements(0, 1000000);
+    assert(idle.simulated && idle.valid);
+    assert(idle.voltage_mV == 12000 && idle.current_mA == 0);
+    assert(idle.heatsink_temperature_mC == 25000);
+    assert(check_start_protection(idle, {}, 1000000) == StopReason::None);
+
+    const SimulationFault faults[]{SimulationFault::OverVoltage, SimulationFault::OverCurrent,
+        SimulationFault::OverPower, SimulationFault::HotHeatsink,
+        SimulationFault::SensorFailure, SimulationFault::StaleSensor,
+        SimulationFault::HotProbe, SimulationFault::MissingProbe};
+    const StopReason reasons[]{StopReason::OverVoltage, StopReason::OverCurrent,
+        StopReason::OverPower, StopReason::HeatsinkOverTemperature,
+        StopReason::InvalidMeasurement, StopReason::StaleMeasurement,
+        StopReason::ProbeOverTemperature, StopReason::ProbeDisconnected};
+    for (unsigned i = 0; i < 8; ++i) {
+        SystemStatus status;
+        status.state = RunState::Running;
+        status.output_level = 1000;
+        status.settings.probe_stop_enabled[0] = true;
+        status.measurements = simulation_measurements(1000, 1000000, faults[i]);
+        const auto reason = check_protection(status.measurements, status.settings, 2, 1000000);
+        assert(reason == reasons[i]);
+        assert(record_stop(status, reason));
+        assert(status.state == RunState::Fault && status.output_level == 0);
+        assert(!acknowledge_fault(status));
+
+        FaultRecovery recovery;
+        for (uint64_t now = 2000000; now <= 4000000; now += 50000) {
+            status.measurements = simulation_measurements(0, now);
+            status.fault_can_acknowledge = recovery.update(status.measurements,
+                status.settings, reason, now);
+        }
+        assert(status.fault_can_acknowledge);
+        assert(acknowledge_fault(status));
+        assert(status.state == RunState::Idle && status.output_level == 0);
+    }
+    // Probe faults only stop a run when the corresponding option is enabled.
+    assert(check_protection(simulation_measurements(0, 1000000, SimulationFault::MissingProbe),
+        {}, 2, 1000000) == StopReason::None);
+    assert(simulation_measurements(UINT16_MAX, 1000000).current_mA == 30000);
+    std::puts("PASS PCB simulation inputs, all eight injected faults and recovery without restart");
+}
 void menu_tests()
 {
     MenuModel menu; SystemStatus status; UiCommand command;
     status.state = RunState::Idle; status.measurements = good_measurements();
+    const char *main_items[]{"LIVE MEASUREMENTS", "MODE AND SETPOINT", "PROTECTION",
+        "AUTO STOP", "EXTERNAL PROBES", "LOG DOWNLOAD"};
+    assert(menu.field_count() == 6);
+    for (int i = 0; i < menu.field_count(); ++i) {
+        char label[40], value[32];
+        menu.field_text(i, label, sizeof(label), value, sizeof(value));
+        assert(std::strcmp(label, main_items[i]) == 0);
+        menu.selected = i;
+        assert(!menu.handle(UiEvent::Select, status, &command));
+        assert(menu.screen == static_cast<MenuModel::Screen>(i + 1));
+        menu.selected = menu.field_count() - 1;
+        menu.field_text(menu.selected, label, sizeof(label), value, sizeof(value));
+        assert(std::strcmp(label, "BACK") == 0);
+        assert(!menu.handle(UiEvent::Select, status, &command));
+        assert(menu.screen == MenuModel::Screen::Main);
+        assert(menu.selected == i && !menu.editing);
+    }
+    menu.selected = 0;
     assert(!menu.handle(UiEvent::Previous, status, &command));
-    assert(menu.selected == 6);
+    assert(menu.selected == 5);
     menu.handle(UiEvent::Next, status, &command); assert(menu.selected == 0);
     menu.handle(UiEvent::Next, status, &command); // mode menu
     menu.handle(UiEvent::Select, status, &command);
@@ -135,6 +203,10 @@ void menu_tests()
     menu.handle(UiEvent::Next, status, &command); // current field
     menu.handle(UiEvent::Select, status, &command); assert(menu.editing);
     menu.handle(UiEvent::Next, status, &command); assert(menu.draft.current_setpoint_mA == 1010);
+    assert(!menu.handle(UiEvent::Refresh, status, &command));
+    assert(menu.editing && menu.draft.current_setpoint_mA == 1010);
+    assert(!menu.handle(UiEvent::Select, status, &command));
+    assert(menu.choosing_edit_action && menu.edit_action == 0);
     assert(menu.handle(UiEvent::Select, status, &command));
     assert(command.type == UiCommandType::ApplySettings);
     // A rapid second edit must wait for the application's updated snapshot.
@@ -144,17 +216,66 @@ void menu_tests()
     ++status.settings_revision;
     menu.handle(UiEvent::Select, status, &command);
     menu.handle(UiEvent::Next, status, &command);
-    menu.handle(UiEvent::Back, status, &command);
+    menu.handle(UiEvent::Select, status, &command); // Choose Save or Back.
+    menu.handle(UiEvent::Next, status, &command); // Back cancels the edit.
+    assert(!menu.handle(UiEvent::Select, status, &command));
     assert(!menu.editing && menu.draft.current_setpoint_mA == 1010);
     status.state = RunState::Running;
-    assert(!menu.handle(UiEvent::Select, status, &command)); assert(!menu.editing);
+    assert(menu.handle(UiEvent::Select, status, &command));
+    assert(command.type == UiCommandType::Stop && !menu.editing);
     menu.screen = MenuModel::Screen::Live;
+    menu.selected = 0;
     assert(menu.handle(UiEvent::Select, status, &command));
     assert(command.type == UiCommandType::Stop);
     status.state = RunState::Fault;
     assert(menu.handle(UiEvent::Select, status, &command));
     assert(command.type == UiCommandType::Acknowledge);
-    for (int page = 0; page < 8; ++page) {
+    status.state = RunState::Preparing;
+    assert(menu.handle(UiEvent::Select, status, &command));
+    assert(command.type == UiCommandType::Stop);
+    menu.screen = MenuModel::Screen::Mode;
+    assert(menu.handle(UiEvent::Select, status, &command));
+    assert(command.type == UiCommandType::Stop);
+    assert(!menu.editing);
+
+    for (const auto state : {RunState::Idle, RunState::Complete, RunState::Fault,
+                             RunState::Preparing, RunState::Running}) {
+        for (int page = 1; page <= static_cast<int>(MenuModel::Screen::Logs); ++page) {
+            MenuModel back_menu;
+            back_menu.screen = static_cast<MenuModel::Screen>(page);
+            back_menu.selected = back_menu.field_count() - 1;
+            status.state = state;
+            const bool command_sent = back_menu.handle(UiEvent::Select, status, &command);
+            assert(command_sent == run_is_active(state));
+            if (run_is_active(state)) {
+                assert(command.type == UiCommandType::Stop);
+                assert(back_menu.screen == static_cast<MenuModel::Screen>(page));
+            } else {
+                assert(back_menu.screen == MenuModel::Screen::Main);
+                assert(back_menu.selected == page - 1);
+            }
+            assert(status.state == state); // Back never acknowledges/restarts a fault.
+        }
+    }
+
+    // Invalid limits must still allow cancellation using only rotate/press.
+    MenuModel invalid_edit;
+    invalid_edit.screen = MenuModel::Screen::AutoStop;
+    status.state = RunState::Idle;
+    invalid_edit.handle(UiEvent::Select, status, &command);
+    invalid_edit.draft.low_voltage_cutoff_enabled = true;
+    invalid_edit.draft.high_voltage_cutoff_enabled = true;
+    invalid_edit.draft.low_voltage_cutoff_mV = 20000;
+    invalid_edit.draft.high_voltage_cutoff_mV = 10000;
+    invalid_edit.handle(UiEvent::Select, status, &command);
+    assert(!invalid_edit.handle(UiEvent::Select, status, &command));
+    assert(invalid_edit.editing && invalid_edit.choosing_edit_action);
+    invalid_edit.handle(UiEvent::Next, status, &command);
+    assert(!invalid_edit.handle(UiEvent::Select, status, &command));
+    assert(!invalid_edit.editing && !invalid_edit.choosing_edit_action);
+    assert(invalid_edit.draft.current_setpoint_mA == status.settings.current_setpoint_mA);
+    assert(invalid_edit.draft.low_voltage_cutoff_enabled == status.settings.low_voltage_cutoff_enabled);
+    for (int page = 0; page <= static_cast<int>(MenuModel::Screen::Logs); ++page) {
         menu.screen = static_cast<MenuModel::Screen>(page);
         for (int field = 0; field < menu.field_count(); ++field) {
             char label[40], value[32];
@@ -171,11 +292,12 @@ void menu_tests()
     for (uint8_t state : {2,3,2,3}) steps += decoder.update(state, 4);
     assert(steps == 0); // bounce, no full detent
     decoder.reset(3); assert(decoder.update(0, 4) == 0); // illegal transition
-    std::puts("PASS menu navigation, edit/save/cancel, run lock and encoder decoding");
+    std::puts("PASS selectable Back on all pages, Save/Cancel, invalid-edit exit, Stop priority and encoder decoding");
 }
 }
 int main()
 {
-    sensor_tests(); protection_tests(); controller_tests(); menu_tests();
+    sensor_tests(); protection_tests(); protection_regression_tests(); controller_tests();
+    simulation_tests(); menu_tests();
     std::puts("All host tests passed. This does not validate physical hardware.");
 }

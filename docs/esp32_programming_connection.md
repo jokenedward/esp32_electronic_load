@@ -79,4 +79,8 @@ Before enabling any hardware flags, confirm:
 
 The application now supports simulation or measurement-only recording. Its PI
 controller remains simulation-only; no physical PWM or DAC load demand is sent.
-The proposed rework and staged test instructions are in [board_bringup.md](board_bringup.md).
+The GPIO map follows the uploaded PCB (clock 34, DAC data 35, DAC CS 2).
+Because GPIO34/35 cannot drive outputs, TFT/DAC activation is blocked; use serial
+simulation for now. Sensor scaling values remain proposals and hardware flags
+remain false. See [board_bringup.md](board_bringup.md) for the current map and
+the separate, unselected correction proposals.

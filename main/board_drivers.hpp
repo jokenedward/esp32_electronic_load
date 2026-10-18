@@ -8,7 +8,7 @@
 class Ads7828 {
 public:
     esp_err_t init();
-    esp_err_t read(uint8_t channel, uint16_t *raw, uint32_t *millivolts);
+    esp_err_t read(uint8_t channel, uint32_t *millivolts);
 private:
     esp_err_t convert(uint8_t channel, uint16_t *raw);
     i2c_master_bus_handle_t bus_{nullptr};

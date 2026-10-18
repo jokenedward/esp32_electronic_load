@@ -12,6 +12,18 @@ probes and MCP4922 DAC.
 The code supports menu testing, sensor readings and CSV logging. It starts in
 simulation mode, with the TFT, encoder and real sensor interfaces disabled.
 
+GPIO assignments now match the uploaded `ProgramableLoad_PCB_1.1` design:
+shared clock GPIO34, DAC data GPIO35 and DAC CS GPIO2. GPIO34/35 cannot drive
+outputs on this ESP32, so the TFT/DAC bus is blocked. Serial simulation still
+builds; enabling TFT or DAC bench testing with this map produces a compile-time
+error. Sensor scaling values remain explicitly marked proposals, not fitted values.
+
+For team assignments, missing information and the step-by-step test sequence,
+see [final software and PCB test plan](docs/final_code_and_testing.md).
+To start with generated readings on the PCB, follow
+[run the PCB simulation](docs/run_pcb_simulation.md). It includes the upload
+steps and single-key fault tests; no ADC diagnostic screen is needed.
+
 ## Build
 
 Open this folder in VS Code with the ESP-IDF extension. In an ESP-IDF terminal:
@@ -42,8 +54,15 @@ Set `kTestMode` in `main/project_config.hpp`:
 | `SensorMonitor` | Reads all eight ADC channels and converts the verified sensor inputs |
 
 Start runs the simulation or begins recording measured values, depending on the
-mode. None of these modes drives the physical load. Protection settings apply
-to the simulation; the monitor modes are for measurement and recording only.
+mode. None of these modes drives the physical load. Simulation and SensorMonitor
+check voltage, current, power, heatsink temperature and enabled probe limits.
+VoltageMonitor checks only voltage and the recording timer. A monitor-mode fault
+stops recording; it cannot switch off an externally powered load.
+
+Start first enters PREPARING while the log file opens. Faults remain latched until
+readings have recovered for two seconds and the user acknowledges. Acknowledging
+does not restart the run. See [software protection](docs/software_protection.md)
+for the limits, tests and the physical OFF condition still to be confirmed.
 
 Hardware flags stay false until the corresponding wiring checks are complete.
 The display labels simulated data and shows `--` for unavailable readings.
@@ -53,14 +72,16 @@ The display labels simulated data and shows `--` for unavailable readings.
 | File in `main/` | Purpose |
 |---|---|
 | `app_main.cpp` | Startup, run state and application loop |
-| `project_config.hpp` | Test mode, proposed GPIO assignments and calibration values |
+| `project_config.hpp` | Test mode, uploaded-PCB GPIO assignments and unverified sensor scaling |
 | `hardware.cpp` | Simulated or measured sensor readings; blocks physical load control |
+| `simulation.hpp` | Shared simulated readings and selectable test faults |
 | `board_drivers.cpp` | ADS7828, MCP4922 and 74HC595 communication |
 | `sensor_math.cpp` | Voltage, current and Pt1000 calculations |
 | `menu_model.cpp` | Menu navigation and setting changes |
 | `tft_ui.cpp` | Encoder/serial input and screen layout |
 | `display.cpp` | SSD1963 initialization and full-screen drawing |
-| `load_control.cpp` | Simulated CC/CV control and protection checks |
+| `load_control.cpp` | Simulated CC/CV control |
+| `protection.cpp` | Trip checks, fault latching and recovery checks |
 | `data_logger.cpp` | CSV recording and serial download |
 | `system_types.hpp/.cpp` | Settings, measurements, states and error names |
 
@@ -71,15 +92,26 @@ hardware notes are in `docs/`. Presentations and thermal models are kept separat
 ## Controls
 
 - Turn: move through a menu or change the selected value.
-- Short press: select, edit or save. On the live screen: Start, Stop or Acknowledge.
-- Hold for at least 0.7 seconds, then release: go back or cancel an edit.
+- Press while stopped: select a row. Each submenu has a Back row.
+- Editing: turn to change the value, press to choose Save or Back, turn to the
+  desired action and press again. Back cancels the edit.
+- On the live screen: select Start/Acknowledge or Back.
+- Press while preparing/running: Stop from any screen, without waiting for a repaint.
+- During preparation/running, the TFT footer and serial status show
+  `STOP BEFORE EDITING` and `STOP BEFORE DOWNLOAD` as reminders.
+- After stopping, select Back to return to the main menu. No long press is required.
 
 Serial menu keys are `n` (next), `p` (previous), `e` (select) and `b` (back).
+While preparing/running, `e` also stops immediately through the input task.
 Shortcuts are `s` (start simulation/recording), `x` (stop), `a` (acknowledge)
-and `d` (download CSV).
+and `d` (download CSV). Press `?` for one normal status snapshot. Repeated serial
+readings and the raw-ADC diagnostics screen have been removed; fault messages stay.
+In Simulation only, `0` restores normal readings and `1`-`8` select generated
+fault inputs. The [simulation instructions](docs/run_pcb_simulation.md) list them.
 
 Menus cover live readings, mode/setpoint, protection, automatic stops, external
-probes, log download and ADC diagnostics. Settings can only change while stopped.
+probes and log download. ADC sampling remains internal for measurements/protection.
+Settings can only change while stopped.
 Each new recording replaces the previous CSV, so download it first if needed.
 
 ## Tests
@@ -93,4 +125,3 @@ sh tests/run_host_tests.sh
 The tests cover sensor calculations, menu edits, encoder decoding, simulated
 CC/CV behaviour and protection checks. Build results and hardware tests still
 outstanding are listed in the [test record](docs/software_validation_2026-10-01.md).
-

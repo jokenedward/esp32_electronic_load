@@ -3,7 +3,9 @@
 #include <cstdint>
 #include "driver/gpio.h"
 
-// PROPOSED pins/values require PCB rework. See docs/board_bringup.md.
+// GPIO assignments follow ProgramableLoad_PCB_1.1 in the uploaded PCB ZIP.
+// This records the design, not a working/verified board. Sensor scaling values
+// marked PROPOSAL below are still unverified. See docs/board_bringup.md.
 namespace project_config {
 enum class TestMode { Simulation, VoltageMonitor, SensorMonitor };
 constexpr TestMode kTestMode = TestMode::Simulation;
@@ -58,11 +60,11 @@ constexpr uint32_t kTemperaturePullupOhm = 1000;
 constexpr std::array<uint8_t, 2> kHeatsinkChannels{2, 3};
 constexpr std::array<uint8_t, 4> kProbeChannels{4, 5, 6, 7};
 
-// PROPOSED REWORK: GPIO19 replaces input-only GPIO34 as the shared clock.
-// GPIO25/26 reclaimed from UNUSED SD signals. SD card support is disabled.
-constexpr gpio_num_t kSharedClock = GPIO_NUM_19;
-constexpr gpio_num_t kDacData = GPIO_NUM_26;
-constexpr gpio_num_t kDacCs = GPIO_NUM_25;
+// As drawn in the PCB: GPIO34/35 are input-only on the original ESP32.
+// Keep TFT/DAC disabled; recording these assignments cannot make them outputs.
+constexpr gpio_num_t kSharedClock = GPIO_NUM_34;
+constexpr gpio_num_t kDacData = GPIO_NUM_35;
+constexpr gpio_num_t kDacCs = GPIO_NUM_2; // PCB R27 pulls CS LOW at reset
 constexpr uint32_t kDacReferenceMv = 5000;
 
 // Existing shift-register data/latch/enable pins.
@@ -73,7 +75,7 @@ constexpr gpio_num_t kTftRs = GPIO_NUM_4;
 constexpr gpio_num_t kTftRd = GPIO_NUM_5; // held HIGH: no TFT reads
 constexpr gpio_num_t kTftCs = GPIO_NUM_12; // preserve LOW boot strap
 constexpr gpio_num_t kTftReset = GPIO_NUM_14;
-constexpr gpio_num_t kTftWr = GPIO_NUM_13; // REWIRE from TFT F_CS to TFT WR
+constexpr gpio_num_t kTftWr = GPIO_NUM_13; // J3 pin 16 / Control 4; WR role unverified
 constexpr bool kTftReverseDataBits = true; // QH..QA -> TFT DB0..DB7
 
 constexpr gpio_num_t kEncoderA = GPIO_NUM_22;
@@ -82,7 +84,8 @@ constexpr gpio_num_t kEncoderPush = GPIO_NUM_21;
 constexpr int kEncoderTransitionsPerStep = 4; // check physical detents
 constexpr bool kEncoderReverse = false;
 
-// Prevent the original invalid-output mistake at compile time.
+// Allow serial simulation to describe the PCB, but reject TFT/DAC activation
+// with invalid output pins. board_bus::init() also checks before touching GPIOs.
 constexpr std::array<gpio_num_t, 11> kOutputPins{
     kSharedClock, kDacData, kDacCs, kTftData, kTftLatch, kTftOe,
     kTftRs, kTftRd, kTftCs, kTftReset, kTftWr};
@@ -96,8 +99,25 @@ constexpr bool output_pins_valid()
     }
     return true;
 }
-static_assert(output_pins_valid(), "Invalid, flash-reserved or duplicate output GPIO");
-static_assert(kVoltageChannel < 8 && kCurrentChannel < 8 &&
-              kVoltageChannel != kCurrentChannel, "Invalid ADC channel allocation");
+static_assert((!kUseTft && !kDacBenchTestVerified) || output_pins_valid(),
+              "TFT/DAC requires valid output GPIOs; PCB GPIO34/35 are input-only. "
+              "Keep TFT/DAC disabled until an approved pin map is available.");
+constexpr bool sensor_channels_valid()
+{
+    const std::array<uint8_t, 8> channels{kVoltageChannel, kCurrentChannel,
+        kHeatsinkChannels[0], kHeatsinkChannels[1], kProbeChannels[0],
+        kProbeChannels[1], kProbeChannels[2], kProbeChannels[3]};
+    for (unsigned i = 0; i < channels.size(); ++i) {
+        if (channels[i] >= 8) return false;
+        for (unsigned j = 0; j < i; ++j)
+            if (channels[i] == channels[j]) return false;
+    }
+    return true;
+}
+static_assert(sensor_channels_valid(), "ADC channels must be distinct and in the range 0..7");
+static_assert(kVoltageDividerBottomOhm > 0 && kCurrentDividerBottomOhm > 0 &&
+              kCurrentSensitivityUvPerAmp > 0 && kTemperaturePullupOhm > 0 &&
+              kAdcReferenceMv > 0 && kDacReferenceMv > 0,
+              "Sensor scaling and references must not be zero");
 static_assert(kAdcSamples > 0 && kAdcSamples <= 64, "Invalid ADC averaging count");
 } // namespace project_config

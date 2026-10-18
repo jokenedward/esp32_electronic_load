@@ -3,6 +3,12 @@
 These drivers use the interfaces in the final-board design. Check
 [board bring-up](board_bringup.md) before enabling the hardware flags.
 
+The current GPIO map follows the uploaded PCB, including its input-only
+GPIO34 clock and GPIO35 DAC data assignments. TFT/DAC operation is blocked
+at build time when requested, and the shared-bus initializer rejects this map
+before touching any GPIO. Serial simulation is available. The previous
+GPIO19/26/25 proposal is not selected in the code.
+
 ## Voltage: ADS7828
 
 `Ads7828` in `board_drivers.cpp` uses ESP-IDF's I2C master driver at 100 kHz:
@@ -23,6 +29,9 @@ The **proposed**, not fitted/verified, divider is 12 kΩ top and 1 kΩ bottom.
 In VoltageMonitor, only the configured voltage channel is read. In SensorMonitor,
 all eight channels are read. Every physical ADC input must still be electrically
 safe even if firmware does not read it.
+Raw conversion counts stay inside the ADC driver. Only converted measurements
+and validity flags are passed to the UI, protection and logger. There is no
+raw-ADC diagnostics menu.
 
 ## Current: ACS37010-050B5 on CH0
 
@@ -58,9 +67,11 @@ A = Iref and B = Vref in the netlist. The configuration uses 5 V references
 and unity DAC gain. SDI, SCK and CS need a verified logic-level interface
 with the 5 V DAC. LDAC is grounded in the design.
 
-The application does not call this class. It is available for isolated reference
-measurements, with the power stage disconnected and the bench-verification flag
-set. There is no analogue readback: the return value reports transmission status,
+The application does not call this class. Bench operation needs an approved,
+output-capable pin map first; setting the bench flag with the current PCB map
+fails compilation. Later isolated reference measurements also require the power
+stage disconnected and the bench-verification flag set.
+There is no analogue readback: the return value reports transmission status,
 so output voltage must be checked with a meter. DAC shutdown leaves the output
 high impedance and cannot be relied on to switch the MOSFETs off.
 [Microchip MCP4922 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/22250A.pdf).
@@ -92,12 +103,21 @@ The optional bit reversal matches QH→DB0 through QA→DB7.
 ## Encoder and task separation
 
 Quadrature A/B is polled every 2 ms with illegal transitions rejected.
-The push switch has 30 ms debounce; a hold of 700 ms followed by release means Back.
+The push switch has 30 ms debounce. While stopped, a press/release selects the
+highlighted row. Every submenu has a selectable Back row. While editing, turn
+to change the value, press to choose Save or Back/cancel, then turn and press
+to select the action. There is no long-press navigation. While preparing/running,
+pressing requests Stop immediately
+after debounce and suppresses the release event.
+During preparation/running, the TFT footer and serial status show
+`STOP BEFORE EDITING` and `STOP BEFORE DOWNLOAD` as reminders. They do not
+replace protection messages or change the encoder's immediate Stop action.
 Four transitions per detent is configurable. Pull-ups must be 3.3 V, not 5 V.
 
 The input task collects events. The screen task owns menu/display work.
-The application task owns settings, measurements and logging. Queues carry copies
-between them; the slow screen transfer is not performed inside the control loop.
+The application task owns settings and measurements; a separate logging task
+owns the CSV file. Queues carry copies between them; the slow screen transfer
+is not performed inside the control loop.
 A software Stop request gets priority and clears old queued commands.
 This is not a substitute for an emergency stop or hardware protection.
 
@@ -110,4 +130,4 @@ save the text between the CSV begin/end markers.
 Rows identify SIMULATED or MEASURED data. Unavailable measurements have empty
 fields. The current mount configuration formats SPIFFS if
 mounting fails, which can erase stored logs; save important results externally.
-There is no SD card driver in this proposal because two SD GPIOs are reassigned.
+There is no SD card driver. GPIO25/26 are no longer reassigned to the DAC.

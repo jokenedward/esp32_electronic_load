@@ -8,6 +8,7 @@ idf_component_register(
         "data_logger.cpp"
         "hardware.cpp"
         "load_control.cpp"
+        "protection.cpp"
         "system_types.cpp"
         "tft_ui.cpp"
     INCLUDE_DIRS "."

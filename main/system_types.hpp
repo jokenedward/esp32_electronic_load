@@ -19,6 +19,7 @@ enum class LoadMode : uint8_t {
 enum class RunState : uint8_t {
     Starting,
     Idle,
+    Preparing,
     Running,
     Complete,
     Fault,
@@ -42,6 +43,8 @@ enum class StopReason : uint8_t {
     TimerExpired,
     OutputDriverFailure,
     LogFailure,
+    InvalidSettings,
+    ControlLoopTimeout,
 };
 
 struct LoadSettings {
@@ -82,9 +85,6 @@ struct Measurements {
     bool voltage_valid{false};
     bool current_valid{false};
     bool heatsink_valid{false};
-    std::array<uint16_t, 8> adc_raw{};
-    std::array<uint32_t, 8> adc_mV{};
-    std::array<bool, 8> adc_valid{};
     bool valid{false};
 };
 
@@ -98,7 +98,13 @@ struct SystemStatus {
     uint32_t elapsed_s{0};
     // Requested load output: 0 = off, 10000 = maximum.
     uint16_t output_level{0};
+    bool fault_can_acknowledge{false};
 };
+
+inline bool run_is_active(RunState state)
+{
+    return state == RunState::Preparing || state == RunState::Running;
+}
 
 inline uint32_t calculate_power_mW(const Measurements &measurements)
 {
@@ -106,10 +112,9 @@ inline uint32_t calculate_power_mW(const Measurements &measurements)
         return 0;
     }
 
-    return static_cast<uint32_t>(
-        (static_cast<uint64_t>(measurements.voltage_mV) *
-         static_cast<uint64_t>(measurements.current_mA)) /
-        1000ULL);
+    const uint64_t power = static_cast<uint64_t>(measurements.voltage_mV) *
+        static_cast<uint64_t>(measurements.current_mA) / 1000ULL;
+    return power > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(power);
 }
 
 inline bool settings_are_valid(const LoadSettings &settings)

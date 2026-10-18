@@ -5,6 +5,7 @@ const char *run_state_name(RunState state)
     switch (state) {
     case RunState::Starting: return "STARTING";
     case RunState::Idle: return "IDLE";
+    case RunState::Preparing: return "PREPARING";
     case RunState::Running: return "RUNNING";
     case RunState::Complete: return "COMPLETE";
     case RunState::Fault: return "FAULT";
@@ -32,6 +33,8 @@ const char *stop_reason_name(StopReason reason)
     case StopReason::TimerExpired: return "TIMER_EXPIRED";
     case StopReason::OutputDriverFailure: return "OUTPUT_DRIVER_FAILURE";
     case StopReason::LogFailure: return "LOG_FAILURE";
+    case StopReason::InvalidSettings: return "INVALID_SETTINGS";
+    case StopReason::ControlLoopTimeout: return "CONTROL_LOOP_TIMEOUT";
     }
     return "UNKNOWN";
 }
