@@ -1,127 +1,73 @@
 # ESP32 Programmable Electronic Load
 
-Firmware for the ELEC5552 electronic-load project, using an ESP32-WROOM-32E-N4
-and ESP-IDF 6.0.2.
+ELEC5552 firmware for the ESP32-WROOM-32E-N4, using ESP-IDF 6.0.2.
 
-The interface uses a 7-inch, 800 × 480 SSD1963 TFT and one rotary encoder.
-The PCB design uses an ADS7828 ADC, ACS37010 current sensor, Pt1000 temperature
-probes and MCP4922 DAC.
+The board design uses an ADS7828 ADC, ACS37010 current sensor, Pt1000 probes,
+MCP4922 DAC, and a 7-inch 800 x 480 SSD1963 TFT with one rotary encoder.
 
-## Current status
+## Submission status
 
-The code supports menu testing, sensor readings and CSV logging. It starts in
-simulation mode, with the TFT, encoder and real sensor interfaces disabled.
+The firmware supports simulated CC/CV operation, menus, protection checks and
+CSV recording. Measurement-only modes are provided for sensor testing after
+the interfaces have been verified.
 
-GPIO assignments now match the uploaded `ProgramableLoad_PCB_1.1` design:
-shared clock GPIO34, DAC data GPIO35 and DAC CS GPIO2. GPIO34/35 cannot drive
-outputs on this ESP32, so the TFT/DAC bus is blocked. Serial simulation still
-builds; enabling TFT or DAC bench testing with this map produces a compile-time
-error. Sensor scaling values remain explicitly marked proposals, not fitted values.
+The default configuration uses serial simulation. The TFT, encoder and hardware
+interfaces are disabled. Physical load control is not implemented: Start and
+Stop do not switch the actual MOSFET load. The PCB issues and calibration values
+still requiring confirmation are listed in [board bring-up](docs/board_bringup.md).
 
-For team assignments, missing information and the step-by-step test sequence,
-see [final software and PCB test plan](docs/final_code_and_testing.md).
-To start with generated readings on the PCB, follow
-[run the PCB simulation](docs/run_pcb_simulation.md). It includes the upload
-steps and single-key fault tests; no ADC diagnostic screen is needed.
+## Build and test
 
-## Build
-
-Open this folder in VS Code with the ESP-IDF extension. In an ESP-IDF terminal:
+Open this folder in VS Code with the ESP-IDF extension and an ESP-IDF 6.0.2
+terminal. The target is `esp32`, with 4 MB flash; it is not `esp32s3`.
 
 ```sh
 idf.py build
 ```
 
-Use the `esp32` target, not `esp32s3`. The configuration uses 4 MB flash for the
-N4 module, with a 1 MB application partition.
-[ESP32-WROOM-32E datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf).
-
-Build files are generated in `build/` and excluded from Git. Building also
-generates the compiler information used by VS Code, so build once after cloning.
-Each person needs their own ESP-IDF installation and serial-port settings.
-
-For the USB-UART wiring and flashing steps, see
-[programming the ESP32](docs/esp32_programming_connection.md).
-
-## Test modes
-
-Set `kTestMode` in `main/project_config.hpp`:
-
-| Mode | Behaviour |
-|---|---|
-| `Simulation` | Generates simulated readings and runs the simulated CC/CV controller |
-| `VoltageMonitor` | Reads voltage from ADS7828 CH1 |
-| `SensorMonitor` | Reads all eight ADC channels and converts the verified sensor inputs |
-
-Start runs the simulation or begins recording measured values, depending on the
-mode. None of these modes drives the physical load. Simulation and SensorMonitor
-check voltage, current, power, heatsink temperature and enabled probe limits.
-VoltageMonitor checks only voltage and the recording timer. A monitor-mode fault
-stops recording; it cannot switch off an externally powered load.
-
-Start first enters PREPARING while the log file opens. Faults remain latched until
-readings have recovered for two seconds and the user acknowledges. Acknowledging
-does not restart the run. See [software protection](docs/software_protection.md)
-for the limits, tests and the physical OFF condition still to be confirmed.
-
-Hardware flags stay false until the corresponding wiring checks are complete.
-The display labels simulated data and shows `--` for unavailable readings.
-
-## Files
-
-| File in `main/` | Purpose |
-|---|---|
-| `app_main.cpp` | Startup, run state and application loop |
-| `project_config.hpp` | Test mode, uploaded-PCB GPIO assignments and unverified sensor scaling |
-| `hardware.cpp` | Simulated or measured sensor readings; blocks physical load control |
-| `simulation.hpp` | Shared simulated readings and selectable test faults |
-| `board_drivers.cpp` | ADS7828, MCP4922 and 74HC595 communication |
-| `sensor_math.cpp` | Voltage, current and Pt1000 calculations |
-| `menu_model.cpp` | Menu navigation and setting changes |
-| `tft_ui.cpp` | Encoder/serial input and screen layout |
-| `display.cpp` | SSD1963 initialization and full-screen drawing |
-| `load_control.cpp` | Simulated CC/CV control |
-| `protection.cpp` | Trip checks, fault latching and recovery checks |
-| `data_logger.cpp` | CSV recording and serial download |
-| `system_types.hpp/.cpp` | Settings, measurements, states and error names |
-
-The `.hpp` files contain declarations shared between source files.
-`font_5x7.hpp` contains the display font. Tests are in `tests/`; setup and
-hardware notes are in `docs/`. Presentations and thermal models are kept separately.
-
-## Controls
-
-- Turn: move through a menu or change the selected value.
-- Press while stopped: select a row. Each submenu has a Back row.
-- Editing: turn to change the value, press to choose Save or Back, turn to the
-  desired action and press again. Back cancels the edit.
-- On the live screen: select Start/Acknowledge or Back.
-- Press while preparing/running: Stop from any screen, without waiting for a repaint.
-- During preparation/running, the TFT footer and serial status show
-  `STOP BEFORE EDITING` and `STOP BEFORE DOWNLOAD` as reminders.
-- After stopping, select Back to return to the main menu. No long press is required.
-
-Serial menu keys are `n` (next), `p` (previous), `e` (select) and `b` (back).
-While preparing/running, `e` also stops immediately through the input task.
-Shortcuts are `s` (start simulation/recording), `x` (stop), `a` (acknowledge)
-and `d` (download CSV). Press `?` for one normal status snapshot. Repeated serial
-readings and the raw-ADC diagnostics screen have been removed; fault messages stay.
-In Simulation only, `0` restores normal readings and `1`-`8` select generated
-fault inputs. The [simulation instructions](docs/run_pcb_simulation.md) list them.
-
-Menus cover live readings, mode/setpoint, protection, automatic stops, external
-probes and log download. ADC sampling remains internal for measurements/protection.
-Settings can only change while stopped.
-Each new recording replaces the previous CSV, so download it first if needed.
-
-## Tests
-
-On Mac or Linux with a C++ compiler:
+Run the computer-based tests on Mac or Linux with a C++ compiler:
 
 ```sh
 sh tests/run_host_tests.sh
 ```
 
-The tests cover sensor calculations, menu edits, encoder decoding, simulated
-CC/CV behaviour and protection checks. Build results and hardware tests still
-outstanding are listed in the [test record](docs/software_validation_2026-10-01.md).
+Build output is generated locally in `build/` and is not included in Git.
+See [programming and testing](docs/run_pcb_simulation.md) for upload instructions.
+
+## Test modes
+
+Set the mode in `main/project_config.hpp`.
+
+| Mode | Purpose |
+|---|---|
+| `Simulation` | Generated readings and a simulated CC/CV controller |
+| `VoltageMonitor` | Voltage measurement and recording from ADS7828 CH1 |
+| `SensorMonitor` | Measurement and recording from all eight ADC channels |
+
+None of these modes drives the physical load. Hardware-verification flags remain
+false until the corresponding electrical checks are complete.
+
+## Interface and recording
+
+There are six menus: Live Measurements, Mode and Setpoint, Protection, Auto Stop,
+External Probes and Log Download. Each submenu has a Back selection.
+Pressing the encoder during an active run requests Stop.
+
+Serial controls include `n/p` to navigate, `e` to select, `b` to go back,
+`s` to start, `x` to stop, `a` to acknowledge a recovered fault,
+`?` for status and `d` to export the CSV.
+
+Recordings use internal flash, not the SD card. A new run replaces the previous
+recording. Save the exported CSV before starting another run.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [Software structure](docs/software_architecture.md) | File responsibilities, code flow, states and protection |
+| [Board bring-up](docs/board_bringup.md) | GPIO map, calibration assumptions and outstanding hardware checks |
+| [Programming and testing](docs/run_pcb_simulation.md) | Upload procedure, menu checks, fault tests and CSV export |
+| [Verification record](docs/verification.md) | Completed software checks, known limitations and remaining tests |
+
+The `main/` folder contains the firmware and `tests/` contains the host tests.
+See [team workflow](CONTRIBUTING.md) for collaboration.
